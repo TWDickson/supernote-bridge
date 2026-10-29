@@ -1,0 +1,10 @@
+{
+  "id": "supernote-bridge",
+  "name": "Supernote Bridge",
+  "version": "0.0.1",
+  "minAppVersion": "1.13.0",
+  "description": "Sync handwritten Supernote notebooks into your vault as searchable, linked markdown, and send OCR corrections back.",
+  "author": "Taylor Dickson",
+  "authorUrl": "https://github.com/TWDickson",
+  "isDesktopOnly": false
+}

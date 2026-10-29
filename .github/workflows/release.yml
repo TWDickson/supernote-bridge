@@ -1,0 +1,55 @@
+name: Release
+
+# Tags are bare semver with no `v` prefix: BRAT resolves a release by matching
+# the tag to manifest.json's version exactly.
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Verify tag matches manifest.json and versions.json
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          MIN_APP_VERSION=$(node -p "require('./manifest.json').minAppVersion")
+          MAPPED=$(node -p "require('./versions.json')['${TAG}'] ?? ''")
+          if [ "$TAG" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag ${TAG} does not match manifest.json version ${MANIFEST_VERSION}. Run \`npm version\` before tagging."
+            exit 1
+          fi
+          if [ "$MAPPED" != "$MIN_APP_VERSION" ]; then
+            echo "::error::versions.json has '${TAG}': '${MAPPED}', expected minAppVersion '${MIN_APP_VERSION}'."
+            exit 1
+          fi
+
+      - run: npm ci
+
+      # Same gate as CI: the release build is the one that reaches devices.
+      - run: npm run check
+
+      # A pre-release suffix (0.1.0-beta.1) publishes as a GitHub pre-release,
+      # which BRAT only installs for users who opted into betas.
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRERELEASE=""
+          case "${GITHUB_REF_NAME}" in *-*) PRERELEASE="--prerelease" ;; esac
+          gh release create "${GITHUB_REF_NAME}" $PRERELEASE \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            main.js manifest.json styles.css
