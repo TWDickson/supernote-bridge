@@ -277,7 +277,10 @@ exists.
 - [ ] **PL-18** per-folder split-mode overrides
 
 ### Server track (parallel, in the fork)
-- [ ] **SV-1** plugin token · [ ] **SV-2** change feed · [ ] **SV-3** structure
+- [~] **SV-1** plugin token — built + preflight READY on server branch
+      `feat/plugin-tokens` (`97e1b00`), **not deployed yet**. `snb_…` tokens
+      minted under Settings → App tokens, `Authorization: Bearer`, limited to
+      `/api/extended/`, `/api/file/`, `/api/oss/` (token/OAuth management → 403) · [ ] **SV-2** change feed · [ ] **SV-3** structure
 - [ ] **SV-4** correction model · [ ] **SV-5** write endpoint
 
 Suggested order: SV-1 → P1 → SV-3 → P2 → SV-2 → P3 → SV-4/SV-5 → P4 → P5.

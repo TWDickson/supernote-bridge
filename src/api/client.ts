@@ -31,8 +31,8 @@ export class SupernoteClient {
 		const headers: Record<string, string> = { ...params.headers };
 		if (authenticated) {
 			const token = this.getToken();
-			if (!token) throw new SupernoteApiError("No API token configured", 0);
-			headers["x-access-token"] = token;
+			if (!token) throw new SupernoteApiError("No app token configured", 0);
+			headers.Authorization = `Bearer ${token}`;
 		}
 		const response = await requestUrl({ ...params, headers, throw: false });
 		if (response.status >= 400) {

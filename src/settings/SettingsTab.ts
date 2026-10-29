@@ -25,8 +25,8 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 				control: { type: "text", key: "serverUrl", placeholder: "https://supernote.example.com" },
 			},
 			{
-				name: "API token",
-				desc: "Kept in this device's secret storage, not in the synced plugin data.",
+				name: "App token",
+				desc: "Create one in the server's web UI under settings → app tokens. Kept in this device's secret storage, not in the synced plugin data.",
 				control: { type: "secret", key: "tokenSecretId" },
 			},
 			{
