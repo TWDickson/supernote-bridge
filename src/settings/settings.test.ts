@@ -10,12 +10,14 @@ describe("normalizeSettings", () => {
 		const settings = normalizeSettings({
 			serverUrl: " https://example.test/// ",
 			splitMode: "chapter",
-			splitTitleLevel: 9,
+			splitTitleStyles: [3, 9, "1", 1],
+			syncFolders: ["Note", "", 4, " Document "],
 			folderRules: [{ supernotePrefix: "Note", vaultFolder: "SN" }, { supernotePrefix: 3 }],
 		});
 		expect(settings.serverUrl).toBe("https://example.test");
 		expect(settings.splitMode).toBe(DEFAULT_SETTINGS.splitMode);
-		expect(settings.splitTitleLevel).toBe(DEFAULT_SETTINGS.splitTitleLevel);
+		expect(settings.splitTitleStyles).toEqual([1, 3]);
+		expect(settings.syncFolders).toEqual(["Note", "Document"]);
 		expect(settings.folderRules).toEqual([{ supernotePrefix: "Note", vaultFolder: "SN" }]);
 	});
 });

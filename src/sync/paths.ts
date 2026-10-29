@@ -16,6 +16,10 @@ export function cleanPath(path: string): string {
 		.join("/");
 }
 
+/** The device's notebook folder. Mirrored notebooks drop it, so `Note/Work/Plan.note`
+ *  lands in `<root>/Work`; other synced device folders keep their name. */
+export const NOTEBOOK_ROOT = "Note";
+
 function isUnder(path: string, prefix: string): boolean {
 	return prefix === "" || path === prefix || path.startsWith(`${prefix}/`);
 }
@@ -27,7 +31,8 @@ function isUnder(path: string, prefix: string): boolean {
  * The longest matching rule wins and the part of the notebook's folder below
  * the rule's prefix is kept, so a rule maps a whole subtree. Matching is by
  * whole path segment: a `Note/Work` rule does not capture `Note/Workshop`.
- * With no matching rule the Supernote tree is mirrored under `defaultRoot`.
+ * With no matching rule the device tree is mirrored under `defaultRoot`, minus
+ * the leading `Note` folder.
  */
 export function vaultFolderFor(notebookPath: string, rules: readonly FolderRule[], defaultRoot: string): string {
 	const folder = cleanPath(notebookPath).split("/").slice(0, -1).join("/");
@@ -41,7 +46,10 @@ export function vaultFolderFor(notebookPath: string, rules: readonly FolderRule[
 		}
 	}
 
-	if (best === null) return cleanPath(`${defaultRoot}/${folder}`);
+	if (best === null) {
+		const mirrored = isUnder(folder, NOTEBOOK_ROOT) ? folder.slice(NOTEBOOK_ROOT.length) : folder;
+		return cleanPath(`${defaultRoot}/${mirrored}`);
+	}
 	const rest = best.prefix === "" ? folder : folder.slice(best.prefix.length);
 	return cleanPath(`${best.target}/${rest}`);
 }
@@ -50,4 +58,13 @@ export function vaultFolderFor(notebookPath: string, rules: readonly FolderRule[
 export function notebookName(notebookPath: string): string {
 	const file = cleanPath(notebookPath).split("/").pop() ?? "";
 	return file.replace(/\.note$/i, "");
+}
+
+/** Whether a device path is inside one of the folders chosen for syncing. */
+export function isSyncedPath(devicePath: string, syncFolders: readonly string[]): boolean {
+	const path = cleanPath(devicePath);
+	return syncFolders.some((folder) => {
+		const prefix = cleanPath(folder);
+		return prefix !== "" && isUnder(path, prefix);
+	});
 }

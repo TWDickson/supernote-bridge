@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanPath, notebookName, vaultFolderFor, type FolderRule } from "./paths";
+import { cleanPath, isSyncedPath, notebookName, vaultFolderFor, type FolderRule } from "./paths";
 
 describe("cleanPath", () => {
 	it("collapses and trims separators", () => {
@@ -14,8 +14,13 @@ describe("vaultFolderFor", () => {
 		{ supernotePrefix: "Note/Work/Meetings", vaultFolder: "Work/Meetings" },
 	];
 
-	it("mirrors the tree under the default root when no rule matches", () => {
-		expect(vaultFolderFor("Note/Personal/Ideas.note", rules, "Supernote")).toBe("Supernote/Note/Personal");
+	it("mirrors the tree under the default root, minus Note, when no rule matches", () => {
+		expect(vaultFolderFor("Note/Personal/Ideas.note", rules, "Supernote")).toBe("Supernote/Personal");
+		expect(vaultFolderFor("Note/Top.note", rules, "Supernote")).toBe("Supernote");
+	});
+
+	it("keeps the name of other device folders", () => {
+		expect(vaultFolderFor("Document/Books/A.pdf", rules, "Supernote")).toBe("Supernote/Document/Books");
 	});
 
 	it("keeps the subtree below a matching rule", () => {
@@ -27,7 +32,7 @@ describe("vaultFolderFor", () => {
 	});
 
 	it("matches whole segments only", () => {
-		expect(vaultFolderFor("Note/Workshop/Clay.note", rules, "Supernote")).toBe("Supernote/Note/Workshop");
+		expect(vaultFolderFor("Note/Workshop/Clay.note", rules, "Supernote")).toBe("Supernote/Workshop");
 	});
 
 	it("treats an empty prefix as a catch-all", () => {
@@ -40,5 +45,18 @@ describe("vaultFolderFor", () => {
 describe("notebookName", () => {
 	it("drops the folder and the .note extension", () => {
 		expect(notebookName("Note/Work/Plan.note")).toBe("Plan");
+	});
+});
+
+describe("isSyncedPath", () => {
+	it("matches whole segments of the chosen folders", () => {
+		expect(isSyncedPath("Note/Work/Plan.note", ["Note"])).toBe(true);
+		expect(isSyncedPath("Notebook/X.note", ["Note"])).toBe(false);
+		expect(isSyncedPath("Document/A.pdf", ["Note"])).toBe(false);
+		expect(isSyncedPath("Document/A.pdf", ["Note", "Document"])).toBe(true);
+	});
+
+	it("never treats an empty entry as everything", () => {
+		expect(isSyncedPath("Note/X.note", [""])).toBe(false);
 	});
 });

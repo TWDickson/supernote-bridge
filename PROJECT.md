@@ -54,18 +54,21 @@ branch, goes through `supernote-dev-preflight`, and deploys with
 `supernote-upstream-sync`. Upstreamable pieces go via
 `supernote-upstream-contribute` later.
 
-- **SV-1 — Plugin auth token.** A long-lived, revocable, read/write-scoped
-  token minted from the server web UI's Settings tab (like an app password),
-  accepted as `Authorization: Bearer`. Avoids storing the account password in
-  Obsidian and avoids the device login dance. *(Alternative: reuse the MCP
-  OAuth flow — heavier, needs a redirect into Obsidian via
-  `obsidian://` protocol handler. Recommend the token.)*
+- **SV-1 — Plugin auth token** *(decided 2026-10-29: build it before P1; no
+  password stopgap)*. A long-lived, revocable token minted from the server
+  web UI's Settings tab (like an app password), accepted as
+  `Authorization: Bearer`, stored hashed. Keeps the account password out of
+  Obsidian and skips the device login dance.
 - **SV-2 — Change feed.** `POST /api/extended/sync/changes {cursor}` →
   notebooks changed since `cursor` (file id, path, md5, update time, page
   list with `pageId` + per-page text revision), plus deletions/moves, plus the
   next cursor. Without it every sync re-reads every transcript.
 - **SV-3 — Structure endpoint.** Extend `note/sections` (or add
-  `note/structure`) with title **text** (OCR of the title rect), keywords
+  `note/structure`) with the **raw titles** — page, top, style
+  (`TITLELEVEL`), and title **text** (OCR of the title rect). The plugin
+  computes its own ranges (`src/sync/split.ts`): the server's `sections`
+  ranges assume styles nest (`next_level <= level`), which isn't how people
+  use them. Also keywords
   (text + page), and links: `LINKTYPE` 0 page / 1 file / 4 web, resolved to a
   target `fileId` + `pageId` where the target is on the server.
 - **SV-4 — Correction model.** Today a reprocess overwrites `text_content`.
@@ -158,13 +161,28 @@ tags: [supernote]
 - Notebook index note (MOC) when split into more than one note: lists parts
   in order with dates. Always generated for split modes; optional otherwise.
 
+### 3.1a Folders
+
+Only the device's `Note` folder syncs by default; other device folders
+(`Document`, …) are opt-in in settings. Unmatched notebooks mirror under the
+vault folder (default `Supernote/`) **without** the `Note/` level —
+`Note/Work/Plan.note` → `Supernote/Work/`; another synced device folder keeps
+its name (`Supernote/Document/…`). Folder rules override per subtree, longest
+prefix wins (`src/sync/paths.ts`).
+
 ### 3.2 Split modes (setting, per-folder override later)
 
 | Mode | Result |
 | --- | --- |
 | `notebook` | one note per notebook, title headings become `#`/`##` inside |
-| `title` | one note per title at or above level *N* (default: level 1); pages before the first title go to the index note |
+| `title` **(default)** | a new note at every title whose style is in the chosen set (default: style 1); titles in other styles become headings inside; pages before the first split title go to the index note |
 | `page` | one note per page |
+
+Title styles are a **set, not a depth** (decided 2026-10-29): the device's
+`TITLELEVEL` 1–4 is which of the four title looks was picked, and people pick
+by look rather than as a hierarchy. Settings show one toggle per style.
+*To verify on a synthetic test notebook:* which device look is which
+`TITLELEVEL`, so the toggles can be labelled by appearance instead of number.
 
 Note names come from title text when available, else `<Notebook> — p<N>`;
 the stable identity is `sn_file_id` + `sn_pages`, **never the filename**, so
@@ -182,10 +200,23 @@ On each sync, for each page:
 | changed | same | push (if auto-push on) or queue as a pending correction |
 | changed | changed | **conflict** → keep local, record conflict, show in the review view; never auto-resolve |
 
-Settings: `pull: auto | manual`, `push: auto | manual | off`. Manual push goes
-through a review list (page, diff, push / discard). A server `409` on push is
-treated as a conflict, not an error. Every overwrite of a local block first
-copies the replaced text into the sync log, so nothing is ever lost.
+Settings: `pull: auto | manual`, `push: manual (default) | auto | off`
+(decided 2026-10-29). A server `409` on push is treated as a conflict, not
+an error. Every overwrite of a local block first copies the replaced text
+into the sync log, so nothing is ever lost.
+
+**What gets sent is not the block as-is.** A local change is not necessarily
+an OCR correction: the user may expand on the page, and the plugin itself
+(and other plugins) put Obsidian markup in the block. Before diffing against
+the server, the block goes through a push normaliser (pure,
+`src/sync/pushText.ts`) that removes what the plugin generated — `^sn-` block
+ids, wikilinks rendered from Supernote links (back to their source text),
+title headings — and the push compares *that* to the server's text. The
+review list then shows, per page, exactly the text that would be sent, with
+actions: **send**, **edit before sending**, **keep local only** (marks the
+page so later edits aren't offered again until the server text changes).
+Heuristic flag: a change that mostly *adds* text rather than substituting
+words is labelled "looks like an expansion" and defaults to keep local.
 
 ### 3.4 Links
 
@@ -217,7 +248,7 @@ exists.
 - [x] Pure `paths.ts` with tests + boundary test
 
 ### P1 — Read-only pull (MVP, works against today's server)
-- [ ] **PL-1** `SupernoteClient` auth (interim: device login → token, until SV-1)
+- [ ] **PL-1** `SupernoteClient` auth with the SV-1 token
 - [ ] **PL-2** list notebooks under configured Supernote roots
 - [ ] **PL-3** folder mapping rules (Supernote prefix → vault folder) + default
 - [ ] **PL-4** `notebook` split mode, transcript → managed blocks, frontmatter
@@ -249,19 +280,23 @@ exists.
 - [ ] **SV-1** plugin token · [ ] **SV-2** change feed · [ ] **SV-3** structure
 - [ ] **SV-4** correction model · [ ] **SV-5** write endpoint
 
-Suggested order: P1 → SV-3 → P2 → SV-1/SV-2 → P3 → SV-4/SV-5 → P4 → P5.
+Suggested order: SV-1 → P1 → SV-3 → P2 → SV-2 → P3 → SV-4/SV-5 → P4 → P5.
 P1 is useful on its own and proves the note format before anything writes back.
 
-## 5. Open questions (Taylor)
+## 5. Decisions (2026-10-29)
 
-1. **Name / id.** Scaffolded as `supernote-bridge` / "Supernote Bridge"
-   (there's already a community plugin called "Supernote" — avoid the
-   collision). Rename before the first release if you prefer something else.
-2. **Default split mode** — `title` level 1?
-3. **Folder mapping defaults** — mirror the Supernote tree under one vault
-   folder (e.g. `Supernote/…`) unless a rule matches?
-4. **Auth** — OK to add the SV-1 token to the server rather than storing your
-   account password in Obsidian, even as a P1 stopgap?
-5. **Push default** — manual review first, auto-push opt-in?
-6. **Desktop-only?** Scaffolded as mobile-capable (`isDesktopOnly: false`);
-   the design avoids Node APIs so it should stay that way.
+1. **Name:** stays "Supernote Bridge"; repo `TWDickson/supernote-bridge`
+   matches the plugin id, so the BRAT link reads the same as the plugin.
+2. **Split:** per title by default, split points = a chosen *set* of title
+   styles (default style 1), not a depth (§3.2).
+3. **Folders:** mirror under `Supernote/` without `Note/`; only `Note` syncs
+   by default, other device folders opt-in (§3.1a).
+4. **Auth:** server token (SV-1), no password stopgap.
+5. **Push:** manual review by default; the normaliser + review list keep
+   expansions and Obsidian markup off the server (§3.3).
+6. **Mobile:** stays mobile-capable (`isDesktopOnly: false`).
+
+## 6. Open questions
+
+- Which device title look maps to which `TITLELEVEL` (verify with a synthetic
+  notebook, then label the toggles by look).
