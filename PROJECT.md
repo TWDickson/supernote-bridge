@@ -59,6 +59,13 @@ branch, goes through `supernote-dev-preflight`, and deploys with
   web UI's Settings tab (like an app password), accepted as
   `Authorization: Bearer`, stored hashed. Keeps the account password out of
   Obsidian and skips the device login dance.
+- **SV-1b — OAuth sign-in** *(decided 2026-10-30)*. The plugin signs in the
+  way the MCP connector does: dynamic registration per device, PKCE, consent
+  in the web UI, an `obsidian://supernote-bridge-auth?vault=…` redirect, and
+  rotating refresh tokens. A new `notebooks:sync` scope for an `<base>/api`
+  resource is kept strictly apart from MCP tokens. Each device is its own
+  grant under Connected apps. App tokens (SV-1) stay as the manual fallback.
+  Spec: [`docs/server-auth-spec.md`](docs/server-auth-spec.md).
 - **SV-2 — Change feed.** `POST /api/extended/sync/changes {cursor}` →
   notebooks changed since `cursor` (file id, path, md5, update time, page
   list with `pageId` + per-page text revision), plus deletions/moves, plus the
@@ -248,7 +255,12 @@ exists.
 - [x] Pure `paths.ts` with tests + boundary test
 
 ### P1 — Read-only pull (MVP, works against today's server)
-- [ ] **PL-1** `SupernoteClient` auth with the SV-1 token
+- [ ] **PL-1** sign-in: OAuth (SV-1b) through `registerObsidianProtocolHandler`,
+      tokens in SecretStorage, refresh + rotation; "paste an app token" fallback
+- [ ] **PL-1a** "This device syncs with the server" switch, stored per device
+      (`loadLocalStorage`, not the synced `data.json`). Only that device pulls
+      and pushes; other devices get the notes and edits through Obsidian Sync,
+      so they need no token. Prevents two devices writing the same notes.
 - [ ] **PL-2** list notebooks under configured Supernote roots
 - [ ] **PL-3** folder mapping rules (Supernote prefix → vault folder) + default
 - [ ] **PL-4** `notebook` split mode, transcript → managed blocks, frontmatter
@@ -280,10 +292,12 @@ exists.
 - [~] **SV-1** plugin token — built + preflight READY on server branch
       `feat/plugin-tokens` (`97e1b00`), **not deployed yet**. `snb_…` tokens
       minted under Settings → App tokens, `Authorization: Bearer`, limited to
-      `/api/extended/`, `/api/file/`, `/api/oss/` (token/OAuth management → 403) · [ ] **SV-2** change feed · [ ] **SV-3** structure
+      `/api/extended/`, `/api/file/`, `/api/oss/` (token/OAuth management → 403) ·
+      [ ] **SV-1b** OAuth sign-in (spec handed to the server agent 2026-10-30) ·
+      [ ] **SV-2** change feed · [ ] **SV-3** structure
 - [ ] **SV-4** correction model · [ ] **SV-5** write endpoint
 
-Suggested order: SV-1 → P1 → SV-3 → P2 → SV-2 → P3 → SV-4/SV-5 → P4 → P5.
+Suggested order: SV-1 + SV-1b → P1 → SV-3 → P2 → SV-2 → P3 → SV-4/SV-5 → P4 → P5.
 P1 is useful on its own and proves the note format before anything writes back.
 
 ## 5. Decisions (2026-10-29)
