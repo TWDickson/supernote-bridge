@@ -2,10 +2,11 @@ import { type App, Notice, PluginSettingTab, type SettingDefinitionItem } from "
 import type SupernoteBridgePlugin from "../main";
 import { TITLE_STYLES, type SupernoteBridgeSettings } from "./settings";
 
-/* Settings that aren't a plain field get a virtual key, mapped in
-   getControlValue / setControlValue. */
+/* Settings that aren't a plain field of the synced settings get a virtual key,
+   mapped in getControlValue / setControlValue. */
 type StyleKey = `splitTitleStyle${(typeof TITLE_STYLES)[number]}`;
-type SettingKey = keyof SupernoteBridgeSettings | StyleKey;
+type DeviceKey = "deviceName" | "deviceSyncs";
+type SettingKey = keyof SupernoteBridgeSettings | StyleKey | DeviceKey;
 
 const STYLE_KEY_PATTERN = /^splitTitleStyle(\d)$/;
 
@@ -18,6 +19,7 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 	}
 
 	override getSettingDefinitions(): SettingDefinitionItem<SettingKey>[] {
+		const { auth } = this.plugin;
 		return [
 			{
 				name: "Server URL",
@@ -25,25 +27,44 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 				control: { type: "text", key: "serverUrl", placeholder: "https://supernote.example.com" },
 			},
 			{
-				name: "App token",
-				desc: "Create one in the server's web UI under settings → app tokens. Kept in this device's secret storage, not in the synced plugin data.",
-				control: { type: "secret", key: "tokenSecretId" },
+				name: "Account",
+				desc: auth.isSignedIn()
+					? "Signed in. This device is listed under connected apps on the server."
+					: "Sign in on the server and approve this device. You'll be brought back here.",
+				render: (setting) => {
+					if (auth.isSignedIn()) {
+						setting.addButton((button) =>
+							button.setButtonText("Sign out").onClick(async () => {
+								await auth.signOut();
+								new Notice("Signed out.");
+								this.update();
+							}),
+						);
+					} else {
+						setting.addButton((button) =>
+							button
+								.setButtonText("Sign in")
+								.setCta()
+								.onClick(async () => {
+									try {
+										await auth.signIn();
+									} catch (err) {
+										new Notice((err as Error).message);
+									}
+								}),
+						);
+					}
+				},
 			},
 			{
-				name: "Test connection",
-				desc: "Check that the server is reachable.",
-				render: (setting) => {
-					setting.addButton((button) =>
-						button.setButtonText("Test").onClick(async () => {
-							try {
-								await this.plugin.client.health();
-								new Notice("Server is reachable.");
-							} catch (err) {
-								new Notice(`Could not reach the server: ${(err as Error).message}`);
-							}
-						}),
-					);
-				},
+				name: "Device name",
+				desc: "How this device appears under connected apps on the server. Takes effect at the next sign-in.",
+				control: { type: "text", key: "deviceName" },
+			},
+			{
+				name: "This device syncs with the server",
+				desc: "Turn this on for one device only. Your other devices get the notes through Obsidian Sync and don't need to sign in.",
+				control: { type: "toggle", key: "deviceSyncs" },
 			},
 			{
 				type: "group",
@@ -61,7 +82,7 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 					},
 					{
 						name: "Split notebooks",
-						desc: "Create one note per notebook, per title, or per page.",
+						desc: "One note per notebook, per title, or per page. For now every notebook syncs as one note; splitting arrives in a later version.",
 						control: {
 							type: "dropdown",
 							key: "splitMode",
@@ -80,19 +101,56 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 					control: { type: "toggle" as const, key: `splitTitleStyle${style}` as const },
 				})),
 			},
+			{
+				type: "group",
+				heading: "Advanced",
+				items: [
+					{
+						name: "App token",
+						desc: "Instead of signing in, use a token created on the server under settings → app tokens. Signing in takes precedence.",
+						control: { type: "secret", key: "tokenSecretId" },
+					},
+					{
+						name: "Test connection",
+						desc: "Check that the server is reachable.",
+						render: (setting) => {
+							setting.addButton((button) =>
+								button.setButtonText("Test").onClick(async () => {
+									try {
+										await this.plugin.client.health();
+										new Notice("Server is reachable.");
+									} catch (err) {
+										new Notice(`Could not reach the server: ${(err as Error).message}`);
+									}
+								}),
+							);
+						},
+					},
+				],
+			},
 		];
 	}
 
 	override getControlValue(key: string): unknown {
-		const { settings } = this.plugin;
+		const { settings, device } = this.plugin;
 		const style = STYLE_KEY_PATTERN.exec(key);
 		if (style) return settings.splitTitleStyles.includes(Number(style[1]));
 		if (key === "syncFolders") return settings.syncFolders.join(", ");
+		if (key === "deviceName") return device.deviceName;
+		if (key === "deviceSyncs") return device.syncsWithServer;
 		return (settings as unknown as Record<string, unknown>)[key];
 	}
 
 	override async setControlValue(key: string, value: unknown): Promise<void> {
-		const { settings } = this.plugin;
+		const { settings, device } = this.plugin;
+		if (key === "deviceName") {
+			device.deviceName = String(value);
+			return;
+		}
+		if (key === "deviceSyncs") {
+			device.syncsWithServer = value === true;
+			return;
+		}
 		const style = STYLE_KEY_PATTERN.exec(key);
 		if (style) {
 			const n = Number(style[1]);

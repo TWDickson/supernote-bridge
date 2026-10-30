@@ -255,17 +255,18 @@ exists.
 - [x] Pure `paths.ts` with tests + boundary test
 
 ### P1 — Read-only pull (MVP, works against today's server)
-- [ ] **PL-1** sign-in: OAuth (SV-1b) through `registerObsidianProtocolHandler`,
+- [x] **PL-1** sign-in: OAuth (SV-1b) through `registerObsidianProtocolHandler`,
       tokens in SecretStorage, refresh + rotation; "paste an app token" fallback
-- [ ] **PL-1a** "This device syncs with the server" switch, stored per device
+- [x] **PL-1a** "This device syncs with the server" switch, stored per device
       (`loadLocalStorage`, not the synced `data.json`). Only that device pulls
       and pushes; other devices get the notes and edits through Obsidian Sync,
       so they need no token. Prevents two devices writing the same notes.
-- [ ] **PL-2** list notebooks under configured Supernote roots
-- [ ] **PL-3** folder mapping rules (Supernote prefix → vault folder) + default
-- [ ] **PL-4** `notebook` split mode, transcript → managed blocks, frontmatter
-- [ ] **PL-5** idempotent re-sync (rewrite only changed blocks; preserve outside text)
-- [ ] **PL-6** commands: *Sync now*, *Sync this note*, *Open on server*; status bar
+- [x] **PL-2** list notebooks under configured Supernote roots
+- [x] **PL-3** folder mapping rules (model + mirroring; no rules editor UI yet) (Supernote prefix → vault folder) + default
+- [x] **PL-4** `notebook` split mode, transcript → managed blocks, frontmatter
+- [x] **PL-5** idempotent re-sync (rewrite only changed blocks; preserve outside text)
+- [~] **PL-6** commands: *Sync now* ✅, sign in/out ✅, ribbon + status bar ✅;
+      *Sync this note* / *Open on server* not yet
 - [ ] **PL-7** sync log note / modal with last run results
 
 ### P2 — Structure (needs SV-3)

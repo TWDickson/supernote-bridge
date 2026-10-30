@@ -68,3 +68,13 @@ export function isSyncedPath(devicePath: string, syncFolders: readonly string[])
 		return prefix !== "" && isUnder(path, prefix);
 	});
 }
+
+/** Whether walking into a device folder can reach anything synced: it is
+ *  synced itself, or it is an ancestor of a synced folder. */
+export function shouldWalk(folderPath: string, syncFolders: readonly string[]): boolean {
+	const path = cleanPath(folderPath);
+	return syncFolders.some((folder) => {
+		const prefix = cleanPath(folder);
+		return prefix !== "" && (isUnder(path, prefix) || isUnder(prefix, path));
+	});
+}

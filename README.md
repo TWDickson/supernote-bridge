@@ -13,8 +13,25 @@ made in Obsidian sent back to the server.
 1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) from the
    community plugins list.
 2. BRAT → *Add beta plugin* → `TWDickson/supernote-bridge`.
-3. Enable **Supernote Bridge**, then in its settings set the server URL and
-   the API token (stored in Obsidian's secret storage on each device).
+3. Enable **Supernote Bridge**. In its settings, set the server URL and press
+   **Sign in**: approve the device on the server and you're sent back to
+   Obsidian. (Or paste an app token from the server under *Advanced*.)
+4. Turn on **This device syncs with the server**. Signing in turns it on.
+   Do this on **one** device only; the others get the notes through Obsidian
+   Sync and don't need to sign in.
+5. Run **Sync now** from the command palette or the ribbon.
+
+### What a sync does (0.1)
+
+- Every notebook in the device's `Note` folder becomes one note under
+  `Supernote/`, mirroring the device folders (`Note/Work/Plan.note` →
+  `Supernote/Work/Plan.md`).
+- Each page's OCR text sits between hidden `%% sn:page … %%` markers. Text
+  outside the markers is yours and is never touched.
+- Corrections you make inside a page are kept on later syncs, even if the
+  server's text changes. Sending them back to the server comes later.
+- Notes are matched by the `sn_file_id` property, so you can rename and move
+  them.
 
 Requires Obsidian 1.13.0 or later. Works on desktop and mobile.
 
