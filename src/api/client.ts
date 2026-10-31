@@ -1,10 +1,8 @@
 import { requestUrl, type RequestUrlResponse } from "obsidian";
 import {
 	fileIdBody,
-	fileIdsBody,
 	listFolderBody,
 	parseServerFile,
-	type ProcessingStatus,
 	type ServerFile,
 	type TranscriptPage,
 } from "./types";
@@ -54,16 +52,6 @@ export class SupernoteClient {
 			}
 			if (pageNo >= (json.pages ?? 1)) return files;
 		}
-	}
-
-	/** Processing state per file id. It aggregates every task (OCR, summary,
-	 *  embedding), so treat it as a hint, never as proof the text is final. */
-	async processingStatus(fileIds: readonly string[]): Promise<Record<string, ProcessingStatus>> {
-		if (fileIds.length === 0) return {};
-		const json = (await this.post("/api/extended/file/processing/status", fileIdsBody(fileIds))).json as {
-			statusMap?: Record<string, ProcessingStatus>;
-		};
-		return json.statusMap ?? {};
 	}
 
 	/** A notebook's OCR text per page, or null when it has none yet. */

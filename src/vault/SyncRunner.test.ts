@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryVault } from "../__mocks__/obsidian";
 import type { SupernoteClient } from "../api/client";
-import type { ProcessingStatus, ServerFile, TranscriptPage } from "../api/types";
+import type { ServerFile, TranscriptPage } from "../api/types";
 import { DEFAULT_SETTINGS } from "../settings/settings";
 import { parseBlocks } from "../sync/blocks";
+import { DEFAULT_SELECTION, type FolderSelection } from "../sync/selection";
 import { SyncRunner } from "./SyncRunner";
 
 const BIG_ID = "770747265093468819";
@@ -12,7 +13,6 @@ const BIG_ID = "770747265093468819";
 class FakeServer {
 	tree = new Map<string, ServerFile[]>();
 	transcripts = new Map<string, TranscriptPage[]>();
-	status: Record<string, ProcessingStatus> = {};
 	transcriptCalls: string[] = [];
 
 	folder(id: string, parent: string, name: string): void {
@@ -22,7 +22,6 @@ class FakeServer {
 	notebook(id: string, parent: string, name: string, md5: string, pages: string[]): void {
 		this.add(parent, { id, directoryId: parent, fileName: name, isFolder: false, md5, updateTime: 1 });
 		this.setPages(id, pages);
-		this.status[id] = "COMPLETED";
 	}
 
 	setPages(id: string, pages: string[]): void {
@@ -38,7 +37,6 @@ class FakeServer {
 
 	client = {
 		listFolder: async (id: string) => this.tree.get(id) ?? [],
-		processingStatus: async (ids: readonly string[]) => Object.fromEntries(ids.map((id) => [id, this.status[id] ?? "NONE"])),
 		transcript: async (id: string) => {
 			this.transcriptCalls.push(id);
 			return this.transcripts.get(id) ?? null;
@@ -50,13 +48,15 @@ describe("SyncRunner", () => {
 	let server: FakeServer;
 	let vault: MemoryVault;
 	let settings: typeof DEFAULT_SETTINGS;
+	let selection: FolderSelection;
 	let runner: SyncRunner;
 
 	beforeEach(() => {
 		server = new FakeServer();
 		vault = new MemoryVault();
 		settings = { ...DEFAULT_SETTINGS, folderRules: [{ supernotePrefix: "Note/Work", vaultFolder: "Work/Handwritten" }] };
-		runner = new SyncRunner(vault.app as never, server.client, () => settings);
+		selection = DEFAULT_SELECTION;
+		runner = new SyncRunner(vault.app as never, server.client, () => settings, () => selection);
 
 		server.folder("10", "0", "Note");
 		server.folder("11", "10", "Work");
@@ -77,14 +77,26 @@ describe("SyncRunner", () => {
 		expect(parseBlocks(ideas).map((b) => b.text)).toEqual(["first idea", "second idea"]);
 	});
 
-	it("skips unchanged notebooks without fetching their text", async () => {
+	it("writes nothing when nothing changed", async () => {
 		await runner.run();
-		server.transcriptCalls = [];
+		const before = new Map(vault.files);
 
 		const report = await runner.run();
 
 		expect(report).toMatchObject({ created: 0, updated: 0, unchanged: 2 });
-		expect(server.transcriptCalls).toEqual([]);
+		expect(vault.files).toEqual(before);
+	});
+
+	it("picks up text re-read on the server even though the notebook file is unchanged", async () => {
+		await runner.run();
+		server.setPages("2", ["plan page, re-read by a better model"]);
+
+		const report = await runner.run();
+
+		expect(report).toMatchObject({ updated: 1 });
+		expect(parseBlocks(vault.files.get("Work/Handwritten/Plan.md") ?? "").map((b) => b.text)).toEqual([
+			"plan page, re-read by a better model",
+		]);
 	});
 
 	it("updates text from the server, keeps local corrections, and finds moved notes", async () => {
@@ -103,19 +115,18 @@ describe("SyncRunner", () => {
 		const note = vault.files.get("Elsewhere/Renamed.md") ?? "";
 		expect(parseBlocks(note).map((b) => b.text)).toEqual(["first idea, re-read", "second idea, corrected"]);
 		expect(note).toContain("my own notes");
-		expect(note).toContain('sn_md5: "m1b"');
 		expect(vault.files.has("Supernote/Ideas.md")).toBe(false);
 	});
 
-	it("re-reads a notebook whose processing hasn't completed, and records no md5 for it", async () => {
-		server.status[BIG_ID] = "PROCESSING";
+	it("skips excluded folders and never deletes notes already written for them", async () => {
 		await runner.run();
-		expect(vault.files.get("Supernote/Ideas.md")).not.toContain("sn_md5");
-		server.transcriptCalls = [];
+		selection = { include: ["Note"], exclude: ["Note/Work"] };
+		server.setPages("2", ["changed on the server"]);
 
-		await runner.run();
+		const report = await runner.run();
 
-		expect(server.transcriptCalls).toContain(BIG_ID);
+		expect(report).toMatchObject({ created: 0, updated: 0, unchanged: 1 });
+		expect(parseBlocks(vault.files.get("Work/Handwritten/Plan.md") ?? "").map((b) => b.text)).toEqual(["plan page"]);
 	});
 
 	it("waits for OCR, and doesn't overwrite an unrelated note of the same name", async () => {

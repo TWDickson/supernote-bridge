@@ -59,22 +59,3 @@ export function notebookName(notebookPath: string): string {
 	const file = cleanPath(notebookPath).split("/").pop() ?? "";
 	return file.replace(/\.note$/i, "");
 }
-
-/** Whether a device path is inside one of the folders chosen for syncing. */
-export function isSyncedPath(devicePath: string, syncFolders: readonly string[]): boolean {
-	const path = cleanPath(devicePath);
-	return syncFolders.some((folder) => {
-		const prefix = cleanPath(folder);
-		return prefix !== "" && isUnder(path, prefix);
-	});
-}
-
-/** Whether walking into a device folder can reach anything synced: it is
- *  synced itself, or it is an ancestor of a synced folder. */
-export function shouldWalk(folderPath: string, syncFolders: readonly string[]): boolean {
-	const path = cleanPath(folderPath);
-	return syncFolders.some((folder) => {
-		const prefix = cleanPath(folder);
-		return prefix !== "" && (isUnder(path, prefix) || isUnder(prefix, path));
-	});
-}

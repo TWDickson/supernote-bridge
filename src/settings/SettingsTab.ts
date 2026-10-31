@@ -1,14 +1,13 @@
 import { type App, Notice, PluginSettingTab, type SettingDefinitionItem } from "obsidian";
 import type SupernoteBridgePlugin from "../main";
+import { describeSelection } from "../sync/selection";
+import { FolderPickerModal } from "./FolderPickerModal";
 import { TITLE_STYLES, type SupernoteBridgeSettings } from "./settings";
 
-/* Settings that aren't a plain field of the synced settings get a virtual key,
-   mapped in getControlValue / setControlValue. */
-type StyleKey = `splitTitleStyle${(typeof TITLE_STYLES)[number]}`;
+/* Settings kept per device rather than in the synced settings get a virtual
+   key, mapped in getControlValue / setControlValue. */
 type DeviceKey = "deviceName" | "deviceSyncs";
-type SettingKey = keyof SupernoteBridgeSettings | StyleKey | DeviceKey;
-
-const STYLE_KEY_PATTERN = /^splitTitleStyle(\d)$/;
+type SettingKey = keyof SupernoteBridgeSettings | DeviceKey;
 
 export class SupernoteBridgeSettingTab extends PluginSettingTab {
 	constructor(
@@ -71,9 +70,22 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 				heading: "Notes",
 				items: [
 					{
-						name: "Device folders",
-						desc: "Comma-separated folders on the device to sync. Note holds your notebooks.",
-						control: { type: "text", key: "syncFolders", placeholder: "Note" },
+						name: "Folders to sync on this device",
+						desc: `${describeSelection(this.plugin.device.folderSelection)} Chosen per device, so other devices aren't affected.`,
+						render: (setting) => {
+							setting.addButton((button) =>
+								button.setButtonText("Choose…").onClick(() => {
+									if (!auth.isSignedIn() && !auth.hasAppToken()) {
+										new Notice("Sign in first, so the folders can be read from the server.");
+										return;
+									}
+									new FolderPickerModal(this.app, this.plugin.client, this.plugin.device.folderSelection, (selection) => {
+										this.plugin.device.folderSelection = selection;
+										this.update();
+									}).open();
+								}),
+							);
+						},
 					},
 					{
 						name: "Vault folder",
@@ -94,11 +106,25 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 			{
 				type: "group",
 				heading: "Title splits",
-				items: TITLE_STYLES.map((style) => ({
-					name: `Title style ${style}`,
-					desc: style === 1 ? "Titles in the styles you turn on here start a new note. Other titles become headings inside it." : undefined,
+				items: TITLE_STYLES.map((style, i) => ({
+					name: style.label,
+					desc:
+						i === 0
+							? "Titles in the styles you turn on start a new note; the rest become headings inside it. Splitting arrives in a later version."
+							: undefined,
 					visible: () => this.plugin.settings.splitMode === "title",
-					control: { type: "toggle" as const, key: `splitTitleStyle${style}` as const },
+					render: (setting) => {
+						setting.nameEl.prepend(
+							createSpan({ cls: "snb-title-swatch", text: "Title", attr: { "data-style": style.code } }),
+						);
+						setting.addToggle((toggle) =>
+							toggle.setValue(this.plugin.settings.splitTitleStyles.includes(style.code)).onChange(async (on) => {
+								const others = this.plugin.settings.splitTitleStyles.filter((code) => code !== style.code);
+								this.plugin.settings.splitTitleStyles = on ? [...others, style.code] : others;
+								await this.plugin.saveSettings();
+							}),
+						);
+					},
 				})),
 			},
 			{
@@ -133,9 +159,6 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 
 	override getControlValue(key: string): unknown {
 		const { settings, device } = this.plugin;
-		const style = STYLE_KEY_PATTERN.exec(key);
-		if (style) return settings.splitTitleStyles.includes(Number(style[1]));
-		if (key === "syncFolders") return settings.syncFolders.join(", ");
 		if (key === "deviceName") return device.deviceName;
 		if (key === "deviceSyncs") return device.syncsWithServer;
 		return (settings as unknown as Record<string, unknown>)[key];
@@ -151,16 +174,7 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 			device.syncsWithServer = value === true;
 			return;
 		}
-		const style = STYLE_KEY_PATTERN.exec(key);
-		if (style) {
-			const n = Number(style[1]);
-			const others = settings.splitTitleStyles.filter((s) => s !== n);
-			settings.splitTitleStyles = value === true ? [...others, n] : others;
-		} else if (key === "syncFolders") {
-			settings.syncFolders = String(value).split(",");
-		} else {
-			(settings as unknown as Record<string, unknown>)[key] = value;
-		}
+		(settings as unknown as Record<string, unknown>)[key] = value;
 		await this.plugin.saveSettings();
 		// The title-style toggles show only in "Per title" mode.
 		if (key === "splitMode") this.refreshDomState();

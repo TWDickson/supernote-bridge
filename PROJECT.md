@@ -70,7 +70,12 @@ branch, goes through `supernote-dev-preflight`, and deploys with
   notebooks changed since `cursor` (file id, path, md5, update time, page
   list with `pageId` + per-page text revision), plus deletions/moves, plus the
   next cursor. Without it every sync re-reads every transcript.
-- **SV-3 — Structure endpoint.** Extend `note/sections` (or add
+- **SV-3 — Structure endpoint** (spec handed over 2026-10-31:
+  [`docs/server-structure-spec.md`](docs/server-structure-spec.md)). Key
+  finding: `TITLELEVEL` is 1 on all 3,701 stored titles; the four looks are
+  `TITLESTYLE` codes `1000254` / `1157254` / `1201000` / `1000000`. Title text
+  comes from OCR of the stored title bitmap.
+- *(original note)* **SV-3 — Structure endpoint.** Extend `note/sections` (or add
   `note/structure`) with the **raw titles** — page, top, style
   (`TITLELEVEL`), and title **text** (OCR of the title rect). The plugin
   computes its own ranges (`src/sync/split.ts`): the server's `sections`
@@ -185,8 +190,10 @@ prefix wins (`src/sync/paths.ts`).
 | `title` **(default)** | a new note at every title whose style is in the chosen set (default: style 1); titles in other styles become headings inside; pages before the first split title go to the index note |
 | `page` | one note per page |
 
-Title styles are a **set, not a depth** (decided 2026-10-29): the device's
-`TITLELEVEL` 1–4 is which of the four title looks was picked, and people pick
+Title styles are a **set, not a depth** (decided 2026-10-29). *Correction
+2026-10-31:* the look is `TITLESTYLE` (four codes), not `TITLELEVEL`, which is
+always 1. Settings show a swatch per style; labels still to be confirmed
+against the device. The device's `TITLELEVEL` 1–4 was assumed to be which of the four title looks was picked, and people pick
 by look rather than as a hierarchy. Settings show one toggle per style.
 *To verify on a synthetic test notebook:* which device look is which
 `TITLELEVEL`, so the toggles can be labelled by appearance instead of number.
@@ -265,6 +272,13 @@ exists.
 - [x] **PL-3** folder mapping rules (model + mirroring; no rules editor UI yet) (Supernote prefix → vault folder) + default
 - [x] **PL-4** `notebook` split mode, transcript → managed blocks, frontmatter
 - [x] **PL-5** idempotent re-sync (rewrite only changed blocks; preserve outside text)
+- [x] **PL-6a** (0.1.1) folder selection is **per device** (`DeviceStore`),
+      chosen in a picker over the server's real folder tree; include/exclude
+      marks, nearest wins (`src/sync/selection.ts`). Turning a folder off never
+      deletes notes.
+- [x] **PL-6b** (0.1.1) every sync re-reads every notebook's text. md5 can't
+      gate it: a Claude re-read changes page text without touching the file
+      (found in 0.1.0). Fine at ~30 notebooks; SV-2 makes it incremental.
 - [~] **PL-6** commands: *Sync now* ✅, sign in/out ✅, ribbon + status bar ✅;
       *Sync this note* / *Open on server* not yet
 - [ ] **PL-7** sync log note / modal with last run results

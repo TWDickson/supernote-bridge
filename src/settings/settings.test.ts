@@ -10,14 +10,16 @@ describe("normalizeSettings", () => {
 		const settings = normalizeSettings({
 			serverUrl: " https://example.test/// ",
 			splitMode: "chapter",
-			splitTitleStyles: [3, 9, "1", 1],
-			syncFolders: ["Note", "", 4, " Document "],
+			splitTitleStyles: ["1201000", "nope", "1000254"],
 			folderRules: [{ supernotePrefix: "Note", vaultFolder: "SN" }, { supernotePrefix: 3 }],
 		});
 		expect(settings.serverUrl).toBe("https://example.test");
 		expect(settings.splitMode).toBe(DEFAULT_SETTINGS.splitMode);
-		expect(settings.splitTitleStyles).toEqual([1, 3]);
-		expect(settings.syncFolders).toEqual(["Note", "Document"]);
+		expect(settings.splitTitleStyles).toEqual(["1000254", "1201000"]);
 		expect(settings.folderRules).toEqual([{ supernotePrefix: "Note", vaultFolder: "SN" }]);
+	});
+
+	it("replaces 0.1.0's numeric title levels with the default", () => {
+		expect(normalizeSettings({ splitTitleStyles: [1] }).splitTitleStyles).toEqual(DEFAULT_SETTINGS.splitTitleStyles);
 	});
 });

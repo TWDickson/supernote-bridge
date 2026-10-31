@@ -8,30 +8,39 @@ export interface SupernoteBridgeSettings {
 	/** Name of the entry in Obsidian's secret storage that holds the API token.
 	 *  The token itself is never stored in data.json, which syncs between devices. */
 	tokenSecretId: string;
-	/** Device folders to sync. `Note` holds the notebooks; the rest are opt-in. */
-	syncFolders: string[];
 	/** Vault folder that mirrors the device tree (minus `Note`) when no folder rule matches. */
 	vaultRoot: string;
 	folderRules: FolderRule[];
 	splitMode: SplitMode;
-	/** Title styles (device TITLELEVEL 1–4) that start a new note in `title`
-	 *  mode. A set, not a depth: people pick title styles by look, not as a
-	 *  hierarchy. */
-	splitTitleStyles: number[];
+	/** Title styles (the device's TITLESTYLE codes) that start a new note in
+	 *  `title` mode. A set, not a depth: people pick title styles by look. */
+	splitTitleStyles: string[];
 }
 
 export const DEFAULT_SETTINGS: SupernoteBridgeSettings = {
 	serverUrl: "https://sn.twdickson.com",
 	tokenSecretId: "",
-	syncFolders: ["Note"],
 	vaultRoot: "Supernote",
 	folderRules: [],
 	splitMode: "title",
-	splitTitleStyles: [1],
+	splitTitleStyles: ["1000254"],
 };
 
 const SPLIT_MODES: readonly SplitMode[] = ["notebook", "title", "page"];
-export const TITLE_STYLES = [1, 2, 3, 4] as const;
+/**
+ * The device's four title styles, keyed by the TITLESTYLE code stored with
+ * each title. (TITLELEVEL is always 1, so it can't tell them apart.) The code
+ * reads as 1, then background grey, then ink grey, each 0–255; the labels
+ * follow from that and are still to be checked against the device.
+ */
+export const TITLE_STYLES = [
+	{ code: "1000254", label: "Black" },
+	{ code: "1157254", label: "Dark grey" },
+	{ code: "1201000", label: "Light grey" },
+	{ code: "1000000", label: "Fourth style" },
+] as const;
+
+const TITLE_STYLE_CODES: readonly string[] = TITLE_STYLES.map((style) => style.code);
 
 /** Merge stored data over the defaults, dropping anything malformed, so the
  *  rest of the plugin can trust every field. */
@@ -47,16 +56,14 @@ export function normalizeSettings(raw: unknown): SupernoteBridgeSettings {
 					typeof (rule as FolderRule).vaultFolder === "string",
 			)
 		: [];
-	const strings = (value: unknown) =>
-		Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v.trim() !== "").map((v) => v.trim()) : null;
-	const styles = Array.isArray(data.splitTitleStyles)
-		? TITLE_STYLES.filter((style) => (data.splitTitleStyles as unknown[]).includes(style))
+	/* 0.1.0 stored TITLELEVEL numbers, which never varied; those fall back to the default. */
+	const styles = Array.isArray(data.splitTitleStyles) && data.splitTitleStyles.every((v) => typeof v === "string")
+		? TITLE_STYLE_CODES.filter((code) => (data.splitTitleStyles as string[]).includes(code))
 		: null;
 
 	return {
 		serverUrl: str(data.serverUrl, DEFAULT_SETTINGS.serverUrl).trim().replace(/\/+$/, ""),
 		tokenSecretId: str(data.tokenSecretId, DEFAULT_SETTINGS.tokenSecretId),
-		syncFolders: strings(data.syncFolders) ?? [...DEFAULT_SETTINGS.syncFolders],
 		vaultRoot: str(data.vaultRoot, DEFAULT_SETTINGS.vaultRoot),
 		folderRules: rules.map(({ supernotePrefix, vaultFolder }) => ({ supernotePrefix, vaultFolder })),
 		splitMode: SPLIT_MODES.includes(data.splitMode as SplitMode)

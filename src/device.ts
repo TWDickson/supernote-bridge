@@ -1,4 +1,5 @@
 import { type App, Platform } from "obsidian";
+import { DEFAULT_SELECTION, normalizeSelection, type FolderSelection } from "./sync/selection";
 
 const PREFIX = "supernote-bridge:";
 
@@ -51,6 +52,20 @@ export class DeviceStore {
 
 	set syncsWithServer(value: boolean) {
 		this.set("syncs", value);
+	}
+
+	/** Which device folders this device syncs. Per device, so a work laptop can
+	 *  leave folders out without changing what home syncs. */
+	get folderSelection(): FolderSelection {
+		return normalizeSelection(this.get("folders")) ?? DEFAULT_SELECTION;
+	}
+
+	set folderSelection(value: FolderSelection) {
+		this.set("folders", value);
+	}
+
+	hasFolderSelection(): boolean {
+		return normalizeSelection(this.get("folders")) !== null;
 	}
 
 	get oauthClient(): OAuthClient | null {

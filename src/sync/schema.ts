@@ -5,16 +5,16 @@ import { renderBlock, type ServerPage } from "./blocks";
 export const FM = {
 	fileId: "sn_file_id",
 	source: "sn_source",
-	md5: "sn_md5",
 	synced: "sn_synced",
 } as const;
+
+/** Written by 0.1.0 and no longer meaningful; removed when a note is next updated. */
+export const LEGACY_MD5_KEY = "sn_md5";
 
 export interface NotebookIdentity {
 	fileId: string;
 	/** Device path, e.g. `Note/Work/Plan.note`. */
 	source: string;
-	/** md5 of the `.note` the text came from, once its OCR has finished. */
-	md5: string | null;
 }
 
 function yamlString(value: string): string {
@@ -28,7 +28,6 @@ export function renderNewNote(identity: NotebookIdentity, title: string, pages: 
 		"---",
 		`${FM.fileId}: ${yamlString(identity.fileId)}`,
 		`${FM.source}: ${yamlString(identity.source)}`,
-		...(identity.md5 ? [`${FM.md5}: ${yamlString(identity.md5)}`] : []),
 		`${FM.synced}: ${yamlString(syncedAt)}`,
 		"---",
 	].join("\n");

@@ -23,7 +23,10 @@ made in Obsidian sent back to the server.
 
 ### What a sync does (0.1)
 
-- Every notebook in the device's `Note` folder becomes one note under
+- You choose which device folders sync **on each device** (settings →
+  *Folders to sync on this device*). Turning a folder off never deletes notes
+  already in the vault.
+- Every synced notebook becomes one note under
   `Supernote/`, mirroring the device folders (`Note/Work/Plan.note` →
   `Supernote/Work/Plan.md`).
 - Each page's OCR text sits between hidden `%% sn:page … %%` markers. Text

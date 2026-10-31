@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanPath, isSyncedPath, notebookName, shouldWalk, vaultFolderFor, type FolderRule } from "./paths";
+import { cleanPath, notebookName, vaultFolderFor, type FolderRule } from "./paths";
 
 describe("cleanPath", () => {
 	it("collapses and trims separators", () => {
@@ -45,28 +45,5 @@ describe("vaultFolderFor", () => {
 describe("notebookName", () => {
 	it("drops the folder and the .note extension", () => {
 		expect(notebookName("Note/Work/Plan.note")).toBe("Plan");
-	});
-});
-
-describe("isSyncedPath", () => {
-	it("matches whole segments of the chosen folders", () => {
-		expect(isSyncedPath("Note/Work/Plan.note", ["Note"])).toBe(true);
-		expect(isSyncedPath("Notebook/X.note", ["Note"])).toBe(false);
-		expect(isSyncedPath("Document/A.pdf", ["Note"])).toBe(false);
-		expect(isSyncedPath("Document/A.pdf", ["Note", "Document"])).toBe(true);
-	});
-
-	it("never treats an empty entry as everything", () => {
-		expect(isSyncedPath("Note/X.note", [""])).toBe(false);
-	});
-});
-
-describe("shouldWalk", () => {
-	it("walks synced folders and their ancestors only", () => {
-		expect(shouldWalk("Note", ["Note"])).toBe(true);
-		expect(shouldWalk("Note/Work", ["Note"])).toBe(true);
-		expect(shouldWalk("Note", ["Note/Work"])).toBe(true);
-		expect(shouldWalk("Note/Home", ["Note/Work"])).toBe(false);
-		expect(shouldWalk("Document", ["Note"])).toBe(false);
 	});
 });

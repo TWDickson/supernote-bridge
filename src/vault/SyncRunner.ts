@@ -1,10 +1,11 @@
 import { type App, normalizePath, TFile } from "obsidian";
 import type { SupernoteClient } from "../api/client";
-import type { ProcessingStatus, ServerFile } from "../api/types";
+import type { ServerFile } from "../api/types";
 import type { SupernoteBridgeSettings } from "../settings/settings";
 import { mergeBlocks, type PageOutcome, type ServerPage } from "../sync/blocks";
-import { cleanPath, isSyncedPath, notebookName, shouldWalk, vaultFolderFor } from "../sync/paths";
-import { FM, renderNewNote } from "../sync/schema";
+import { cleanPath, notebookName, vaultFolderFor } from "../sync/paths";
+import { isSelected, shouldWalkInto, type FolderSelection } from "../sync/selection";
+import { FM, LEGACY_MD5_KEY, renderNewNote } from "../sync/schema";
 
 interface Notebook {
 	file: ServerFile;
@@ -35,17 +36,17 @@ export class SyncRunner {
 		private readonly app: App,
 		private readonly client: SupernoteClient,
 		private readonly settings: () => SupernoteBridgeSettings,
+		private readonly selection: () => FolderSelection,
 	) {}
 
 	async run(): Promise<SyncReport> {
 		const report: SyncReport = { created: 0, updated: 0, unchanged: 0, waitingForOcr: 0, localEdits: 0, conflicts: [], errors: [] };
 		const notebooks = await this.listNotebooks();
-		const statuses = await this.client.processingStatus(notebooks.map((n) => n.file.id));
 		const notes = this.indexNotes();
 
 		for (const notebook of notebooks) {
 			try {
-				await this.syncNotebook(notebook, statuses[notebook.file.id], notes.get(notebook.file.id) ?? null, report);
+				await this.syncNotebook(notebook, notes.get(notebook.file.id) ?? null, report);
 			} catch (err) {
 				report.errors.push(`${notebook.path}: ${(err as Error).message}`);
 			}
@@ -53,21 +54,10 @@ export class SyncRunner {
 		return report;
 	}
 
-	private async syncNotebook(
-		notebook: Notebook,
-		status: ProcessingStatus | undefined,
-		existing: TFile | null,
-		report: SyncReport,
-	): Promise<void> {
-		const done = status === "COMPLETED";
-		if (existing && done && notebook.file.md5) {
-			const recorded = this.app.metadataCache.getFileCache(existing)?.frontmatter?.[FM.md5] as unknown;
-			if (recorded === notebook.file.md5) {
-				report.unchanged++;
-				return;
-			}
-		}
-
+	/* Every sync reads every notebook's text. The .note file's md5 can't stand
+	   in for it: OCR finishes after upload, and a re-read (e.g. by Claude)
+	   rewrites a page's text on the server without touching the file. */
+	private async syncNotebook(notebook: Notebook, existing: TFile | null, report: SyncReport): Promise<void> {
 		const transcript = await this.client.transcript(notebook.file.id);
 		if (transcript === null) {
 			report.waitingForOcr++;
@@ -76,11 +66,10 @@ export class SyncRunner {
 		const pages: ServerPage[] = [...transcript]
 			.sort((a, b) => a.pageIndex - b.pageIndex)
 			.map((p) => ({ pageId: p.pageId, text: p.text ?? "" }));
-		const md5 = done ? notebook.file.md5 : null;
 		const syncedAt = new Date().toISOString();
 
 		if (!existing) {
-			const identity = { fileId: notebook.file.id, source: notebook.path, md5 };
+			const identity = { fileId: notebook.file.id, source: notebook.path };
 			await this.create(notebook, renderNewNote(identity, notebookName(notebook.path), pages, syncedAt));
 			report.created++;
 			return;
@@ -94,12 +83,11 @@ export class SyncRunner {
 			changed = merged.content !== content;
 			return merged.content;
 		});
-		const recordedMd5 = this.app.metadataCache.getFileCache(existing)?.frontmatter?.[FM.md5] as unknown;
-		if (changed || (md5 && recordedMd5 !== md5)) {
+		const recordedSource = this.app.metadataCache.getFileCache(existing)?.frontmatter?.[FM.source] as unknown;
+		if (changed || recordedSource !== notebook.path) {
 			await this.app.fileManager.processFrontMatter(existing, (fm: Record<string, unknown>) => {
 				fm[FM.source] = notebook.path;
-				if (md5) fm[FM.md5] = md5;
-				else delete fm[FM.md5];
+				delete fm[LEGACY_MD5_KEY];
 				if (changed) fm[FM.synced] = syncedAt;
 			});
 		}
@@ -132,14 +120,14 @@ export class SyncRunner {
 	}
 
 	private async listNotebooks(): Promise<Notebook[]> {
-		const { syncFolders } = this.settings();
+		const selection = this.selection();
 		const notebooks: Notebook[] = [];
 		const walk = async (directoryId: string, prefix: string) => {
 			for (const file of await this.client.listFolder(directoryId)) {
 				const path = cleanPath(`${prefix}/${file.fileName}`);
 				if (file.isFolder) {
-					if (shouldWalk(path, syncFolders)) await walk(file.id, path);
-				} else if (/\.note$/i.test(file.fileName) && isSyncedPath(path, syncFolders)) {
+					if (shouldWalkInto(path, selection)) await walk(file.id, path);
+				} else if (/\.note$/i.test(file.fileName) && isSelected(path, selection)) {
 					notebooks.push({ file, path });
 				}
 			}

@@ -18,8 +18,8 @@ export default class SupernoteBridgePlugin extends Plugin {
 	private statusBar: HTMLElement | null = null;
 
 	override async onload(): Promise<void> {
-		await this.loadSettings();
 		this.device = new DeviceStore(this.app);
+		await this.loadSettings();
 		this.auth = new AuthManager(
 			this.app,
 			this.device,
@@ -30,7 +30,12 @@ export default class SupernoteBridgePlugin extends Plugin {
 			() => this.settings.serverUrl,
 			(forceRefresh) => this.auth.bearer(forceRefresh),
 		);
-		this.runner = new SyncRunner(this.app, this.client, () => this.settings);
+		this.runner = new SyncRunner(
+			this.app,
+			this.client,
+			() => this.settings,
+			() => this.device.folderSelection,
+		);
 
 		this.settingTab = new SupernoteBridgeSettingTab(this.app, this);
 		this.addSettingTab(this.settingTab);
@@ -72,7 +77,17 @@ export default class SupernoteBridgePlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = normalizeSettings(await this.loadData());
+		const raw = (await this.loadData()) as { syncFolders?: unknown } | null;
+		this.settings = normalizeSettings(raw);
+		this.adoptSyncedFolderList(raw?.syncFolders);
+	}
+
+	/* 0.1.0 kept the folder list in the synced settings. A device that has no
+	   choice of its own starts from that list. */
+	private adoptSyncedFolderList(folders: unknown): void {
+		if (this.device.hasFolderSelection() || !Array.isArray(folders)) return;
+		const include = folders.filter((f): f is string => typeof f === "string" && f.trim() !== "");
+		if (include.length > 0) this.device.folderSelection = { include, exclude: [] };
 	}
 
 	async saveSettings(): Promise<void> {

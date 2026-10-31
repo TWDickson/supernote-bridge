@@ -1,1 +1,71 @@
 /* Supernote Bridge — plugin styles. Use Obsidian CSS variables; no inline styles in code. */
+
+.snb-muted {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+/* Folder picker */
+.snb-folder-list {
+	max-height: 50vh;
+	overflow-y: auto;
+	margin-bottom: var(--size-4-4);
+}
+
+.snb-folder-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	padding: var(--size-2-1) 0;
+	padding-left: calc(var(--snb-depth, 0) * var(--size-4-6));
+}
+
+.snb-folder-toggle {
+	flex: none;
+}
+
+.snb-folder-label {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-3);
+	cursor: pointer;
+}
+
+/* Title style swatches: the device's own greys, so these stay fixed colours
+   rather than theme variables. */
+.snb-title-swatch {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 4.5em;
+	margin-right: var(--size-4-2);
+	padding: 0 var(--size-2-3);
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.8;
+	vertical-align: middle;
+}
+
+.snb-title-swatch[data-style="1000254"] {
+	background-color: rgb(0, 0, 0);
+	color: rgb(254, 254, 254);
+}
+
+.snb-title-swatch[data-style="1157254"] {
+	background-color: rgb(157, 157, 157);
+	color: rgb(254, 254, 254);
+}
+
+.snb-title-swatch[data-style="1201000"] {
+	background-color: rgb(201, 201, 201);
+	color: rgb(0, 0, 0);
+}
+
+.snb-title-swatch[data-style="1000000"] {
+	background-color: rgb(254, 254, 254);
+	color: rgb(0, 0, 0);
+	border-color: rgb(0, 0, 0);
+	border-style: dashed;
+}

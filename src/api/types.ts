@@ -11,8 +11,6 @@ export interface ServerFile {
 	updateTime: number | null;
 }
 
-export type ProcessingStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "NONE";
-
 export interface TranscriptPage {
 	pageIndex: number;
 	pageId: string;
@@ -27,10 +25,6 @@ function idLiteral(id: string): string {
 /** `{"fileId": 770747265093468819}` with the digits intact. */
 export function fileIdBody(id: string): string {
 	return `{"fileId":${idLiteral(id)}}`;
-}
-
-export function fileIdsBody(ids: readonly string[]): string {
-	return `{"fileIds":[${ids.map(idLiteral).join(",")}]}`;
 }
 
 export function listFolderBody(directoryId: string, pageNo: number, pageSize: number): string {
