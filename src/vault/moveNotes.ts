@@ -41,7 +41,8 @@ export function placedNotes(app: App): PlacedNote[] {
 }
 
 /** Carry out moves through the file manager, so links to the notes follow.
- *  A move whose destination is taken is skipped, never overwritten. */
+ *  A move whose destination is taken is skipped, never overwritten. Folders
+ *  the moves leave empty go to the trash, so the old layout doesn't linger. */
 export async function applyMoves(app: App, moves: readonly Move[]): Promise<{ moved: number; skipped: string[] }> {
 	let moved = 0;
 	const skipped: string[] = [];
@@ -56,5 +57,20 @@ export async function applyMoves(app: App, moves: readonly Move[]): Promise<{ mo
 		await app.fileManager.renameFile(file, normalizePath(to));
 		moved++;
 	}
+	for (const folder of emptiedFolders(moves.map((move) => move.from))) {
+		const handle = app.vault.getFolderByPath(folder);
+		if (handle && handle.children.length === 0) await app.fileManager.trashFile(handle);
+	}
 	return { moved, skipped };
+}
+
+/** Folders that held the moved notes, and their parents, deepest first, so a
+ *  folder is checked after anything inside it has gone. */
+export function emptiedFolders(movedFrom: readonly string[]): string[] {
+	const folders = new Set<string>();
+	for (const path of movedFrom) {
+		const parts = cleanPath(path).split("/").slice(0, -1);
+		for (let i = parts.length; i > 0; i--) folders.add(parts.slice(0, i).join("/"));
+	}
+	return [...folders].sort((a, b) => b.split("/").length - a.split("/").length || a.localeCompare(b));
 }

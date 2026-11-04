@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FolderRule } from "../sync/paths";
-import { planMoves } from "./moveNotes";
+import { emptiedFolders, planMoves } from "./moveNotes";
 
 const weeks: FolderRule = { supernotePrefix: "Note/Work/Weeks", vaultFolder: "Work/Weekly" };
 const work: FolderRule = { supernotePrefix: "Note/Work", vaultFolder: "Work/Planners" };
@@ -30,6 +30,16 @@ describe("planMoves", () => {
 	it("handles notebooks no rule covers with the default folder", () => {
 		expect(planMoves(notes, rules, "Handwritten", null)).toEqual([
 			{ from: "Supernote/Journal/Journal 2026-11.md", to: "Handwritten/Journal/Journal 2026-11.md" },
+		]);
+	});
+});
+
+describe("emptiedFolders", () => {
+	it("lists the moved notes' folders and their parents, deepest first", () => {
+		expect(emptiedFolders(["Supernote/Work/Weeks/2026-W45.md", "Supernote/Work/2026-11 Daily Planner.md", "Top.md"])).toEqual([
+			"Supernote/Work/Weeks",
+			"Supernote/Work",
+			"Supernote",
 		]);
 	});
 });

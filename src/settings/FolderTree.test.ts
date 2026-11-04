@@ -45,10 +45,11 @@ describe("FolderTree", () => {
 		/* Note is on except Journal, so its box is partly ticked. */
 		const boxes = els.filter((e) => e.tag === "input");
 		expect(boxes.map((b) => [b.checked, b.indeterminate])).toEqual([[false, false], [false, true]]);
-		expect(els.filter((e) => e.tag === "button").map((b) => b.text)).toEqual(["→ Supernote/Document · Per title", "→ Supernote · Per title"]);
+		/* Only folders this device syncs show where they go; the default split isn't repeated. */
+		expect(els.filter((e) => e.tag === "button").map((b) => b.text)).toEqual(["→ Supernote"]);
 	});
 
-	it("marks a folder with its own rule, and expands to show inherited children", async () => {
+	it("marks a folder with its own rule, and expands to its subfolders", async () => {
 		const el = new FakeEl();
 		const { tree: t } = mountTree([{ supernotePrefix: "Note/Work", vaultFolder: "Work/Planners", splitMode: "page" }]);
 		t.mount(el as unknown as HTMLElement);
@@ -58,8 +59,8 @@ describe("FolderTree", () => {
 		const els = await rendered(el, (all) => all.filter((e) => e.tag === "input").length === 4);
 
 		const summaries = els.filter((e) => e.tag === "button");
-		expect(summaries.map((b) => b.text)).toContain("→ Work/Planners · Per page");
-		expect(summaries.find((b) => b.text.startsWith("→ Work/Planners"))?.cls).toContain("snb-own");
+		expect(summaries.map((b) => b.text)).toEqual(["→ Supernote", "→ Work/Planners · Per page"]);
+		expect(summaries[1]?.cls).toContain("snb-own");
 		expect(els.filter((e) => e.tag === "input").map((b) => b.checked)).toEqual([false, false, false, true]);
 	});
 
@@ -72,5 +73,17 @@ describe("FolderTree", () => {
 		els.filter((e) => e.tag === "input")[0]?.fire("change");
 		expect(host.setSelection).toHaveBeenCalledOnce();
 		expect(selection().include).toContain("Document");
+	});
+});
+
+describe("FolderTree leaves", () => {
+	it("drop their chevron once they're known to have no subfolders", async () => {
+		const el = new FakeEl();
+		const { tree: t } = mountTree();
+		t.mount(el as unknown as HTMLElement);
+		await vi.waitFor(() => {
+			const toggles = el.all().filter((e) => e.cls.includes("snb-folder-toggle"));
+			expect(toggles.map((e) => e.cls.includes("clickable-icon"))).toEqual([false, true]);
+		});
 	});
 });

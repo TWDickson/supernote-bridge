@@ -1,7 +1,7 @@
 import { AbstractInputSuggest, type App, Modal, Notice, Setting, setIcon, type TFolder } from "obsidian";
 import type { SupernoteClient } from "../api/client";
 import { cleanPath, type FolderRule, folderLocation, folderSplit, ownRule, withRule } from "../sync/paths";
-import { setFolder, subtreeState, type FolderSelection } from "../sync/selection";
+import { isSelected, setFolder, subtreeState, type FolderSelection } from "../sync/selection";
 import { applyMoves, placedNotes, planMoves } from "../vault/moveNotes";
 import { SPLIT_LABELS, type SplitMode, type SupernoteBridgeSettings, TITLE_STYLES } from "./settings";
 
@@ -46,6 +46,8 @@ export class FolderTree {
 	private loading = false;
 	private openPath: string | null = null;
 	private el: HTMLElement | null = null;
+	/** Folders whose subfolders are being looked up, so leaves can drop their chevron. */
+	private peeking = new Set<FolderNode>();
 
 	constructor(private readonly host: FolderTreeHost) {}
 
@@ -96,17 +98,23 @@ export class FolderTree {
 
 	private renderNode(node: FolderNode, parent: HTMLElement, depth: number): void {
 		const settings = this.host.settings();
+		const selection = this.host.selection();
 		const row = parent.createDiv({ cls: "snb-folder-row" });
 		row.setCssProps({ "--snb-depth": String(depth) });
 
-		const toggle = row.createSpan({ cls: "snb-folder-toggle clickable-icon" });
-		setIcon(toggle, node.expanded ? "chevron-down" : "chevron-right");
-		toggle.setAttr("aria-label", node.expanded ? "Collapse" : "Expand");
-		toggle.addEventListener("click", () => void this.toggleExpanded(node));
+		/* A folder known to have no subfolders gets no chevron. */
+		const toggle = row.createSpan({ cls: "snb-folder-toggle" });
+		if (node.children === null) this.peek(node);
+		if (node.children?.length !== 0) {
+			toggle.addClass("clickable-icon");
+			setIcon(toggle, node.expanded ? "chevron-down" : "chevron-right");
+			toggle.setAttr("aria-label", node.expanded ? "Collapse" : "Expand");
+			toggle.addEventListener("click", () => void this.toggleExpanded(node));
+		}
 
 		const label = row.createEl("label", { cls: "snb-folder-label" });
-		const box = label.createEl("input", { type: "checkbox" });
-		const state = subtreeState(node.path, this.host.selection());
+		const box = label.createEl("input", { type: "checkbox", cls: "snb-folder-check" });
+		const state = subtreeState(node.path, selection);
 		box.checked = state === "on";
 		box.indeterminate = state === "mixed";
 		box.setAttr("aria-label", `Sync ${node.path} on this device`);
@@ -117,30 +125,50 @@ export class FolderTree {
 		});
 		label.createSpan({ text: node.name });
 
-		const own = ownRule(node.path, settings.folderRules);
-		const split = folderSplit(node.path, settings);
-		/* The destination is the button: clicking it opens this folder's rule. */
-		const open = this.openPath === node.path;
-		const summary = row.createEl("button", {
-			cls: `snb-folder-summary${own ? " snb-own" : ""}${open ? " is-active" : ""}`,
-			text: `→ ${folderLocation(node.path, settings.folderRules, settings.vaultRoot) || "/"} · ${SPLIT_LABELS[split.mode]}`,
-		});
-		summary.setAttr("aria-expanded", String(open));
-		summary.setAttr("aria-label", `${own ? "Set on this folder" : "Inherited"}. Change where ${node.name} goes and how it splits`);
-		summary.addEventListener("click", () => {
-			this.openPath = open ? null : node.path;
-			this.render();
-		});
-
-		if (this.openPath === node.path) this.renderPanel(node, parent, depth);
+		/* Where a folder goes only matters where its notebooks sync, so other
+		   rows stay bare. */
+		if (isSelected(node.path, selection)) {
+			const own = ownRule(node.path, settings.folderRules);
+			const open = this.openPath === node.path;
+			const summary = row.createEl("button", {
+				cls: `snb-folder-summary${own ? " snb-own" : ""}${open ? " is-active" : ""}`,
+				text: this.describe(node.path, settings),
+			});
+			summary.setAttr("aria-expanded", String(open));
+			summary.setAttr("aria-label", `${own ? "Set on this folder" : "Inherited"}. Change where ${node.name} goes and how it splits`);
+			summary.addEventListener("click", () => {
+				this.openPath = open ? null : node.path;
+				this.render();
+			});
+			if (open) this.renderPanel(node, parent, depth);
+		}
 
 		if (node.expanded && node.children) {
-			if (node.children.length === 0) {
-				const empty = parent.createDiv({ cls: "snb-folder-row snb-muted", text: "No subfolders" });
-				empty.setCssProps({ "--snb-depth": String(depth + 1) });
-			}
 			for (const child of node.children) this.renderNode(child, parent, depth + 1);
 		}
+	}
+
+	/** `→ vault folder`, plus the split when it isn't the default. */
+	private describe(path: string, settings: SupernoteBridgeSettings): string {
+		const split = folderSplit(path, settings);
+		const location = folderLocation(path, settings.folderRules, settings.vaultRoot) || "/";
+		return split.mode === settings.splitMode ? `→ ${location}` : `→ ${location} · ${SPLIT_LABELS[split.mode]}`;
+	}
+
+	/** Look up a folder's subfolders in the background, so a leaf can show
+	 *  as one before anyone expands it. */
+	private peek(node: FolderNode): void {
+		if (this.peeking.has(node)) return;
+		this.peeking.add(node);
+		void this.loadChildren(node.id, node.path)
+			.then((children) => {
+				if (node.children === null) node.children = children;
+				if (children.length === 0) this.render();
+			})
+			.catch(() => {
+				/* Expanding retries and reports the error. */
+			})
+			.finally(() => this.peeking.delete(node));
 	}
 
 	private async toggleExpanded(node: FolderNode): Promise<void> {
@@ -218,6 +246,16 @@ export class FolderTree {
 				);
 				setting.nameEl.prepend(createSpan({ cls: "snb-title-swatch", text: "Title", attr: { "data-style": style.code } }));
 			}
+		}
+
+		/* What this folder's setting carries down to, as loaded so far. */
+		const followers = (node.children ?? []).filter((child) => !ownRule(child.path, rules)?.vaultFolder);
+		if (followers.length > 0) {
+			const list = panel.createDiv({ cls: "snb-folder-followers" });
+			list.createSpan({ cls: "snb-muted", text: "Subfolders without their own vault folder go inside it: " });
+			list.createSpan({
+				text: followers.map((child) => `${child.name} → ${folderLocation(child.path, rules, settings.vaultRoot)}`).join(", "),
+			});
 		}
 
 		if (own) {

@@ -18,10 +18,6 @@
 	padding-left: calc(var(--snb-depth, 0) * var(--size-4-6));
 }
 
-.snb-folder-toggle {
-	flex: none;
-}
-
 .snb-folder-label {
 	display: flex;
 	align-items: center;
@@ -30,8 +26,9 @@
 	min-width: 0;
 }
 
-/* Where the folder's notebooks go; the button that opens its rule. */
-.snb-folder-summary {
+/* Where the folder's notebooks go; the button that opens its rule. Styled as
+   quiet text, so it needs the extra specificity to beat themes' button rules. */
+.snb-folder-tree button.snb-folder-summary {
 	margin-left: auto;
 	flex: 0 1 auto;
 	min-width: 0;
@@ -41,22 +38,44 @@
 	background: none;
 	box-shadow: none;
 	border: 1px solid transparent;
+	border-radius: var(--radius-s);
 	color: var(--text-faint);
 	font-size: var(--font-ui-small);
+	font-weight: var(--font-normal);
 	padding: var(--size-2-1) var(--size-2-3);
 	height: auto;
 	cursor: pointer;
 }
 
-.snb-folder-summary:hover,
-.snb-folder-summary.is-active {
-	border-color: var(--background-modifier-border);
+.snb-folder-tree button.snb-folder-summary:hover,
+.snb-folder-tree button.snb-folder-summary.is-active {
+	background: var(--background-modifier-hover);
 	color: var(--text-normal);
 }
 
-.snb-folder-summary.snb-own {
-	color: var(--text-muted);
-	font-weight: var(--font-semibold);
+/* Set on this folder rather than inherited. */
+.snb-folder-tree button.snb-folder-summary.snb-own {
+	color: var(--text-accent);
+}
+
+/* A partly synced folder: some themes draw an indeterminate box as empty. */
+.snb-folder-check:indeterminate {
+	background-color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	background-image: linear-gradient(var(--text-on-accent), var(--text-on-accent));
+	background-size: 50% 2px;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+.snb-folder-toggle {
+	flex: none;
+	width: var(--icon-size, 18px);
+}
+
+.snb-folder-followers {
+	font-size: var(--font-ui-small);
+	padding: var(--size-2-2) 0;
 }
 
 .snb-folder-panel {
@@ -73,7 +92,7 @@
 		flex-wrap: wrap;
 	}
 
-	.snb-folder-summary {
+	.snb-folder-tree button.snb-folder-summary {
 		margin-left: calc(var(--size-4-6) + var(--size-2-2));
 		flex-basis: 100%;
 		text-align: left;

@@ -122,7 +122,9 @@ export class FakeEl {
 	empty(): void {
 		this.children = [];
 	}
-	addClass(): void {}
+	addClass(cls: string): void {
+		this.cls = `${this.cls} ${cls}`.trim();
+	}
 	setCssProps(): void {}
 	setAttr(): void {}
 	addEventListener(type: string, fn: () => void): void {
