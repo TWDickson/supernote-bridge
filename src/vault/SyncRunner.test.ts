@@ -99,6 +99,19 @@ describe("SyncRunner", () => {
 		]);
 	});
 
+	it("writes the same note on every device: no sync time, and old keys are dropped", async () => {
+		await runner.run();
+		const path = "Work/Handwritten/Plan.md";
+		const fresh = vault.files.get(path) ?? "";
+		expect(fresh).not.toContain("sn_synced");
+
+		vault.files.set(path, fresh.replace("---\n", '---\nsn_synced: "2026-10-30T19:00:00Z"\nsn_md5: "m2"\n'));
+		const otherDevice = new SyncRunner(vault.app as never, server.client, () => settings, () => selection);
+		await otherDevice.run();
+
+		expect(vault.files.get(path)).toBe(fresh);
+	});
+
 	it("joins wrapped lines, and rewrites notes written before the setting changed", async () => {
 		const wrapped = ["We walked along the river until the", "light started to fade over the hills."];
 		server.setPages("2", [wrapped.join("\n")]);

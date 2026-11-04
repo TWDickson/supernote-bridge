@@ -5,11 +5,12 @@ import { renderBlock, type ServerPage } from "./blocks";
 export const FM = {
 	fileId: "sn_file_id",
 	source: "sn_source",
-	synced: "sn_synced",
 } as const;
 
-/** Written by 0.1.0 and no longer meaningful; removed when a note is next updated. */
-export const LEGACY_MD5_KEY = "sn_md5";
+/** Keys earlier versions wrote; removed at the next sync. A note holds nothing
+ *  device-specific, such as a sync time, so every device that syncs a notebook
+ *  writes the same bytes and Obsidian Sync has nothing to merge. */
+export const LEGACY_KEYS = ["sn_md5", "sn_synced"] as const;
 
 export interface NotebookIdentity {
 	fileId: string;
@@ -23,14 +24,13 @@ function yamlString(value: string): string {
 
 /** The full text of a note created for a notebook. Frontmatter is written as
  *  a string only here; later changes go through processFrontMatter. */
-export function renderNewNote(identity: NotebookIdentity, title: string, pages: readonly ServerPage[], syncedAt: string): string {
+export function renderNewNote(identity: NotebookIdentity, title: string, pages: readonly ServerPage[]): string {
 	const frontmatter = [
 		"---",
 		`${FM.fileId}: ${yamlString(identity.fileId)}`,
 		`${FM.source}: ${yamlString(identity.source)}`,
-		`${FM.synced}: ${yamlString(syncedAt)}`,
 		"---",
 	].join("\n");
-	const blocks = pages.map(renderBlock).join("\n\n");
+	const blocks = pages.map((page) => renderBlock(page)).join("\n\n");
 	return `${frontmatter}\n# ${title}\n\n${blocks}\n`;
 }

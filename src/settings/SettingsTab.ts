@@ -62,7 +62,7 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 			},
 			{
 				name: "This device syncs with the server",
-				desc: "Turn this on for one device only. Your other devices get the notes through Obsidian Sync and don't need to sign in.",
+				desc: "Turn this on for each device that should pull from the server, and choose its folders below. Devices with it off still get the notes through Obsidian Sync.",
 				control: { type: "toggle", key: "deviceSyncs" },
 			},
 			{

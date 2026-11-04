@@ -105,7 +105,7 @@ export default class SupernoteBridgePlugin extends Plugin {
 			return;
 		}
 		if (!this.device.syncsWithServer) {
-			new Notice("This device doesn't sync with the server. Turn it on in the plugin settings, on one device only.");
+			new Notice("This device doesn't sync with the server. Turn it on in the plugin settings.");
 			return;
 		}
 		if (!this.auth.isSignedIn() && !this.auth.hasAppToken()) {
@@ -117,7 +117,7 @@ export default class SupernoteBridgePlugin extends Plugin {
 		try {
 			const report = await this.runner.run();
 			this.device.lastSync = Date.now();
-			new Notice(summarize(report), report.errors.length || report.conflicts.length ? 15000 : 5000);
+			new Notice(summarize(report), report.errors.length || report.conflicts.length || report.lostMarkup.length ? 15000 : 5000);
 			if (report.errors.length) console.error("Supernote Bridge sync errors:", report.errors);
 		} catch (err) {
 			new Notice(`Sync failed: ${(err as Error).message}`);
@@ -141,6 +141,9 @@ function summarize(report: SyncReport): string {
 	if (report.localEdits) lines.push(`${report.localEdits} corrected pages kept.`);
 	if (report.conflicts.length) {
 		lines.push(`Kept your edits where the server also changed: ${report.conflicts.join(", ")}.`);
+	}
+	if (report.lostMarkup.length) {
+		lines.push(`${report.lostMarkup.length} links or tags no longer fit the updated text: ${report.lostMarkup.join("; ")}.`);
 	}
 	if (report.errors.length) lines.push(`${report.errors.length} failed — see the developer console.`);
 	return lines.join("\n");

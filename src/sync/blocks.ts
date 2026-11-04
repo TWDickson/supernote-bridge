@@ -1,3 +1,5 @@
+import { reapplyMarkup, stripMarkup } from "./markup";
+
 /** One page of a notebook as the server has it. */
 export interface ServerPage {
 	pageId: string;
@@ -15,7 +17,8 @@ export interface NoteBlock {
 /** What happened to a page during a merge, for the sync report. */
 export type PageOutcome =
 	| { kind: "unchanged"; pageId: string }
-	| { kind: "updated"; pageId: string }
+	/** `lostMarkup`: links, tags or block ids the user added that no longer fit the new text. */
+	| { kind: "updated"; pageId: string; lostMarkup?: string[] }
 	| { kind: "added"; pageId: string }
 	| { kind: "removed"; pageId: string }
 	/** Edited in Obsidian, server unchanged: a correction waiting to be sent. */
@@ -32,10 +35,8 @@ export function normalizeText(text: string): string {
 	return text.replace(/\r\n?/g, "\n").replace(/^\n+|\s+$/g, "");
 }
 
-/** FNV-1a, 32-bit. Detects edits; it is not a security boundary. */
-export function hashText(text: string): string {
+function fnv1a(normalized: string): string {
 	let hash = 0x811c9dc5;
-	const normalized = normalizeText(text);
 	for (let i = 0; i < normalized.length; i++) {
 		hash ^= normalized.charCodeAt(i);
 		hash = Math.imul(hash, 0x01000193);
@@ -43,8 +44,25 @@ export function hashText(text: string): string {
 	return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-export function renderBlock(page: ServerPage): string {
-	return `%% sn:page id=${page.pageId} hash=${hashText(page.text)} %%\n${normalizeText(page.text)}\n%% sn:end %%`;
+/** FNV-1a, 32-bit, of the text as written. Detects edits; it is not a security
+ *  boundary. Blocks written before link-aware comparison carry this hash. */
+export function hashText(text: string): string {
+	return fnv1a(normalizeText(text));
+}
+
+/** Hash of the text with user markup stripped, so adding a link or tag
+ *  doesn't change it. Blocks are written with this hash. */
+export function hashPlain(text: string): string {
+	return fnv1a(normalizeText(stripMarkup(normalizeText(text))));
+}
+
+/** Whether `text` reads the same as the text a block's `hash` was taken from. */
+function matchesHash(text: string, hash: string): boolean {
+	return hashPlain(text) === hash || hashText(text) === hash;
+}
+
+export function renderBlock(page: ServerPage, text = page.text): string {
+	return `%% sn:page id=${page.pageId} hash=${hashPlain(page.text)} %%\n${normalizeText(text)}\n%% sn:end %%`;
 }
 
 /** Every page block in a note, in order, with where it sits. */
@@ -58,8 +76,10 @@ export function parseBlocks(content: string): Array<NoteBlock & { start: number;
 	return blocks;
 }
 
+/** Whether the words of a block were changed in Obsidian. Added links, tags
+ *  and block ids don't count. */
 export function isLocallyEdited(block: NoteBlock): boolean {
-	return hashText(block.text) !== block.hash;
+	return !matchesHash(block.text, block.hash);
 }
 
 /**
@@ -98,14 +118,15 @@ export function mergeBlocks(content: string, pages: readonly ServerPage[]): { co
 			continue;
 		}
 		anchor = block.end;
-		const serverHash = hashText(page.text);
+		const serverUnchanged = matchesHash(page.text, block.hash);
 		if (isLocallyEdited(block)) {
-			outcomes.push({ kind: serverHash === block.hash ? "local-edit" : "conflict", pageId: page.pageId });
-		} else if (serverHash === block.hash && normalizeText(block.text) === normalizeText(page.text)) {
+			outcomes.push({ kind: serverUnchanged ? "local-edit" : "conflict", pageId: page.pageId });
+		} else if (serverUnchanged) {
 			outcomes.push({ kind: "unchanged", pageId: page.pageId });
 		} else {
-			replacements.set(block.start, renderBlock(page));
-			outcomes.push({ kind: "updated", pageId: page.pageId });
+			const { text, lost } = reapplyMarkup(block.text, normalizeText(page.text));
+			replacements.set(block.start, renderBlock(page, text));
+			outcomes.push(lost.length ? { kind: "updated", pageId: page.pageId, lostMarkup: lost } : { kind: "updated", pageId: page.pageId });
 		}
 	}
 

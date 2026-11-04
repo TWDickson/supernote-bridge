@@ -6,7 +6,7 @@ import { mergeBlocks, type PageOutcome, type ServerPage } from "../sync/blocks";
 import { cleanPath, notebookName, vaultFolderFor } from "../sync/paths";
 import { isSelected, shouldWalkInto, type FolderSelection } from "../sync/selection";
 import { reflowText } from "../sync/reflow";
-import { FM, LEGACY_MD5_KEY, renderNewNote } from "../sync/schema";
+import { FM, LEGACY_KEYS, renderNewNote } from "../sync/schema";
 
 interface Notebook {
 	file: ServerFile;
@@ -24,6 +24,9 @@ export interface SyncReport {
 	localEdits: number;
 	/** Notes with pages edited here *and* changed on the server; the local text was kept. */
 	conflicts: string[];
+	/** Links, tags or block ids added in Obsidian whose words left the page in a
+	 *  server update, as `note path: markup`. */
+	lostMarkup: string[];
 	errors: string[];
 }
 
@@ -41,7 +44,7 @@ export class SyncRunner {
 	) {}
 
 	async run(): Promise<SyncReport> {
-		const report: SyncReport = { created: 0, updated: 0, unchanged: 0, waitingForOcr: 0, localEdits: 0, conflicts: [], errors: [] };
+		const report: SyncReport = { created: 0, updated: 0, unchanged: 0, waitingForOcr: 0, localEdits: 0, conflicts: [], lostMarkup: [], errors: [] };
 		const notebooks = await this.listNotebooks();
 		const notes = this.indexNotes();
 
@@ -67,11 +70,10 @@ export class SyncRunner {
 		const pages: ServerPage[] = [...transcript]
 			.sort((a, b) => a.pageIndex - b.pageIndex)
 			.map((p) => ({ pageId: p.pageId, text: this.settings().reflowProse ? reflowText(p.text ?? "") : (p.text ?? "") }));
-		const syncedAt = new Date().toISOString();
 
 		if (!existing) {
 			const identity = { fileId: notebook.file.id, source: notebook.path };
-			await this.create(notebook, renderNewNote(identity, notebookName(notebook.path), pages, syncedAt));
+			await this.create(notebook, renderNewNote(identity, notebookName(notebook.path), pages));
 			report.created++;
 			return;
 		}
@@ -84,17 +86,19 @@ export class SyncRunner {
 			changed = merged.content !== content;
 			return merged.content;
 		});
-		const recordedSource = this.app.metadataCache.getFileCache(existing)?.frontmatter?.[FM.source] as unknown;
-		if (changed || recordedSource !== notebook.path) {
+		const frontmatter = this.app.metadataCache.getFileCache(existing)?.frontmatter ?? {};
+		if (frontmatter[FM.source] !== notebook.path || LEGACY_KEYS.some((key) => key in frontmatter)) {
 			await this.app.fileManager.processFrontMatter(existing, (fm: Record<string, unknown>) => {
 				fm[FM.source] = notebook.path;
-				delete fm[LEGACY_MD5_KEY];
-				if (changed) fm[FM.synced] = syncedAt;
+				for (const key of LEGACY_KEYS) delete fm[key];
 			});
 		}
 
 		report.localEdits += outcomes.filter((o) => o.kind === "local-edit").length;
 		if (outcomes.some((o) => o.kind === "conflict")) report.conflicts.push(existing.path);
+		for (const outcome of outcomes) {
+			if (outcome.kind === "updated") for (const markup of outcome.lostMarkup ?? []) report.lostMarkup.push(`${existing.path}: ${markup}`);
+		}
 		if (changed) report.updated++;
 		else report.unchanged++;
 	}

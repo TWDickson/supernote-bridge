@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hashText, mergeBlocks, parseBlocks, renderBlock, type ServerPage } from "./blocks";
+import { hashText, isLocallyEdited, mergeBlocks, parseBlocks, renderBlock, type ServerPage } from "./blocks";
 
 const page = (pageId: string, text: string): ServerPage => ({ pageId, text });
 const note = (...parts: string[]) => parts.join("\n\n") + "\n";
@@ -77,5 +77,38 @@ describe("mergeBlocks", () => {
 		const { content, outcomes } = mergeBlocks(before, [page("P3", "three")]);
 		expect(content).toBe(note(edited, renderBlock(page("P3", "three"))));
 		expect(outcomes.map((o) => o.kind).sort()).toEqual(["orphaned", "removed", "unchanged"]);
+	});
+
+	describe("links added in Obsidian", () => {
+		const lunch = page("P1", "Lunch with Sam at noon");
+		const linked = renderBlock(lunch).replace("Sam", "[[Sam]]");
+
+		it("are not an edit, and stay put while the server is unchanged", () => {
+			const { content, outcomes } = mergeBlocks(linked, [lunch]);
+			expect(outcomes).toEqual([{ kind: "unchanged", pageId: "P1" }]);
+			expect(content).toBe(linked);
+		});
+
+		it("follow the server's new text", () => {
+			const { content, outcomes } = mergeBlocks(linked, [{ pageId: "P1", text: "Lunch with Sam at 12:30" }]);
+			expect(outcomes).toEqual([{ kind: "updated", pageId: "P1" }]);
+			expect(parseBlocks(content)[0]?.text).toBe("Lunch with [[Sam]] at 12:30");
+			expect(isLocallyEdited(parseBlocks(content)[0]!)).toBe(false);
+		});
+
+		it("are reported when the linked words are gone", () => {
+			const { outcomes } = mergeBlocks(linked, [{ pageId: "P1", text: "Lunch alone at noon" }]);
+			expect(outcomes).toEqual([{ kind: "updated", pageId: "P1", lostMarkup: ["[[Sam]]"] }]);
+		});
+
+		it("still count a changed word as an edit", () => {
+			const corrected = linked.replace("noon", "midday");
+			expect(mergeBlocks(corrected, [lunch]).outcomes).toEqual([{ kind: "local-edit", pageId: "P1" }]);
+		});
+
+		it("don't make blocks written with the older hash look edited", () => {
+			const legacy = `%% sn:page id=P1 hash=${hashText("A  spaced   line")} %%\nA  spaced   line\n%% sn:end %%`;
+			expect(mergeBlocks(legacy, [{ pageId: "P1", text: "A  spaced   line" }]).outcomes).toEqual([{ kind: "unchanged", pageId: "P1" }]);
+		});
 	});
 });
