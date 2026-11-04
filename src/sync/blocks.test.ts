@@ -111,4 +111,27 @@ describe("mergeBlocks", () => {
 			expect(mergeBlocks(legacy, [{ pageId: "P1", text: "A  spaced   line" }]).outcomes).toEqual([{ kind: "unchanged", pageId: "P1" }]);
 		});
 	});
+
+	describe("taking the server's text", () => {
+		const lunch = page("P1", "Lunch with Sam at noon");
+		const edited = renderBlock(lunch).replace("noon", "midday").replace("Sam", "[[Sam]]");
+
+		it("replaces an edited page, keeping the links added to it", () => {
+			const server = page("P1", "Lunch with Sam at 12:30");
+			const { content, outcomes } = mergeBlocks(edited, [server], new Set(["P1"]));
+			expect(outcomes).toEqual([{ kind: "updated", pageId: "P1" }]);
+			const block = parseBlocks(content)[0]!;
+			expect(block.text).toBe("Lunch with [[Sam]] at 12:30");
+			expect(isLocallyEdited(block)).toBe(false);
+		});
+
+		it("reverts an edit even when the server hasn't changed", () => {
+			const { content } = mergeBlocks(edited, [lunch], new Set(["P1"]));
+			expect(parseBlocks(content)[0]?.text).toBe("Lunch with [[Sam]] at noon");
+		});
+
+		it("leaves other edited pages alone", () => {
+			expect(mergeBlocks(edited, [lunch], new Set(["P2"])).outcomes).toEqual([{ kind: "local-edit", pageId: "P1" }]);
+		});
+	});
 });

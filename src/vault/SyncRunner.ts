@@ -1,6 +1,6 @@
 import { type App, normalizePath, TFile } from "obsidian";
 import type { SupernoteClient } from "../api/client";
-import type { ServerFile } from "../api/types";
+import type { ServerFile, TranscriptPage } from "../api/types";
 import type { SupernoteBridgeSettings } from "../settings/settings";
 import { mergeBlocks, type PageOutcome, type ServerPage } from "../sync/blocks";
 import { cleanPath, notebookName, vaultFolderFor } from "../sync/paths";
@@ -14,7 +14,28 @@ interface Notebook {
 	path: string;
 }
 
+/** A page in a report: its id and its 1-based page number in the notebook. */
+export interface PageRef {
+	pageId: string;
+	page: number;
+}
+
+/** What a sync did to one note, kept only when there's something to say. */
+export interface NoteReport {
+	path: string;
+	created: boolean;
+	updatedPages: number;
+	/** Edited in Obsidian; kept, and the server's text for them is unchanged. */
+	edited: PageRef[];
+	/** Edited in Obsidian *and* changed on the server; the edit was kept. */
+	conflicts: PageRef[];
+	lostMarkup: Array<PageRef & { markup: string }>;
+}
+
 export interface SyncReport {
+	/** When the sync finished, in ms since the epoch. */
+	at: number;
+	notes: NoteReport[];
 	created: number;
 	updated: number;
 	unchanged: number;
@@ -44,7 +65,18 @@ export class SyncRunner {
 	) {}
 
 	async run(): Promise<SyncReport> {
-		const report: SyncReport = { created: 0, updated: 0, unchanged: 0, waitingForOcr: 0, localEdits: 0, conflicts: [], lostMarkup: [], errors: [] };
+		const report: SyncReport = {
+			at: 0,
+			notes: [],
+			created: 0,
+			updated: 0,
+			unchanged: 0,
+			waitingForOcr: 0,
+			localEdits: 0,
+			conflicts: [],
+			lostMarkup: [],
+			errors: [],
+		};
 		const notebooks = await this.listNotebooks();
 		const notes = this.indexNotes();
 
@@ -55,6 +87,7 @@ export class SyncRunner {
 				report.errors.push(`${notebook.path}: ${(err as Error).message}`);
 			}
 		}
+		report.at = Date.now();
 		return report;
 	}
 
@@ -67,14 +100,13 @@ export class SyncRunner {
 			report.waitingForOcr++;
 			return;
 		}
-		const pages: ServerPage[] = [...transcript]
-			.sort((a, b) => a.pageIndex - b.pageIndex)
-			.map((p) => ({ pageId: p.pageId, text: this.settings().reflowProse ? reflowText(p.text ?? "") : (p.text ?? "") }));
+		const pages = this.pagesFrom(transcript);
 
 		if (!existing) {
 			const identity = { fileId: notebook.file.id, source: notebook.path };
-			await this.create(notebook, renderNewNote(identity, notebookName(notebook.path), pages));
+			const path = await this.create(notebook, renderNewNote(identity, notebookName(notebook.path), pages));
 			report.created++;
+			report.notes.push({ path, created: true, updatedPages: 0, edited: [], conflicts: [], lostMarkup: [] });
 			return;
 		}
 
@@ -94,16 +126,53 @@ export class SyncRunner {
 			});
 		}
 
-		report.localEdits += outcomes.filter((o) => o.kind === "local-edit").length;
-		if (outcomes.some((o) => o.kind === "conflict")) report.conflicts.push(existing.path);
-		for (const outcome of outcomes) {
-			if (outcome.kind === "updated") for (const markup of outcome.lostMarkup ?? []) report.lostMarkup.push(`${existing.path}: ${markup}`);
-		}
+		const ref = (pageId: string): PageRef => ({ pageId, page: pages.findIndex((p) => p.pageId === pageId) + 1 });
+		const note: NoteReport = {
+			path: existing.path,
+			created: false,
+			updatedPages: outcomes.filter((o) => o.kind === "updated" || o.kind === "added" || o.kind === "removed").length,
+			edited: outcomes.filter((o) => o.kind === "local-edit").map((o) => ref(o.pageId)),
+			conflicts: outcomes.filter((o) => o.kind === "conflict").map((o) => ref(o.pageId)),
+			lostMarkup: outcomes.flatMap((o) => (o.kind === "updated" ? (o.lostMarkup ?? []).map((markup) => ({ ...ref(o.pageId), markup })) : [])),
+		};
+		if (note.updatedPages || note.edited.length || note.conflicts.length) report.notes.push(note);
+
+		report.localEdits += note.edited.length;
+		if (note.conflicts.length) report.conflicts.push(existing.path);
+		for (const lost of note.lostMarkup) report.lostMarkup.push(`${existing.path}: ${lost.markup}`);
 		if (changed) report.updated++;
 		else report.unchanged++;
 	}
 
-	private async create(notebook: Notebook, content: string): Promise<void> {
+	/**
+	 * Drop the Obsidian edits on some pages of a synced note and take the
+	 * server's current text for them ("take server text"). Links and tags
+	 * added there are kept where their words still are. Returns how many pages
+	 * changed.
+	 */
+	async takeServerText(file: TFile, pageIds: readonly string[]): Promise<number> {
+		const id = this.app.metadataCache.getFileCache(file)?.frontmatter?.[FM.fileId] as unknown;
+		if (typeof id !== "string" && typeof id !== "number") throw new Error("This note isn't synced from a notebook.");
+		const transcript = await this.client.transcript(String(id));
+		if (transcript === null) throw new Error("The server has no text for this notebook yet.");
+		const pages = this.pagesFrom(transcript);
+		let changedPages = 0;
+		await this.app.vault.process(file, (content) => {
+			const merged = mergeBlocks(content, pages, new Set(pageIds));
+			changedPages = merged.outcomes.filter((o) => o.kind === "updated" && pageIds.includes(o.pageId)).length;
+			return merged.content;
+		});
+		return changedPages;
+	}
+
+	private pagesFrom(transcript: readonly TranscriptPage[]): ServerPage[] {
+		const reflow = this.settings().reflowProse;
+		return [...transcript]
+			.sort((a, b) => a.pageIndex - b.pageIndex)
+			.map((p) => ({ pageId: p.pageId, text: reflow ? reflowText(p.text ?? "") : (p.text ?? "") }));
+	}
+
+	private async create(notebook: Notebook, content: string): Promise<string> {
 		const { folderRules, vaultRoot } = this.settings();
 		const folder = normalizePath(vaultFolderFor(notebook.path, folderRules, vaultRoot) || "/");
 		if (folder !== "/" && !this.app.vault.getFolderByPath(folder)) await this.app.vault.createFolder(folder);
@@ -112,6 +181,7 @@ export class SyncRunner {
 		/* A note of the same name that isn't this notebook's stays untouched. */
 		if (this.app.vault.getAbstractFileByPath(path)) path = normalizePath(`${folder}/${base} (${notebook.file.id}).md`);
 		await this.app.vault.create(path, content);
+		return path;
 	}
 
 	/** Notes already written for a notebook, by server file id. */

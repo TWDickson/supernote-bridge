@@ -91,7 +91,13 @@ export function isLocallyEdited(block: NoteBlock): boolean {
  * server changed too. New server pages are inserted after the block of the
  * page before them, so they keep notebook order.
  */
-export function mergeBlocks(content: string, pages: readonly ServerPage[]): { content: string; outcomes: PageOutcome[] } {
+export function mergeBlocks(
+	content: string,
+	pages: readonly ServerPage[],
+	/** Pages whose Obsidian edits are dropped in favour of the server's text
+	 *  ("take server text"). Links and tags added to them are kept. */
+	takeServer: ReadonlySet<string> = new Set(),
+): { content: string; outcomes: PageOutcome[] } {
 	const existing = parseBlocks(content);
 	const byId = new Map(existing.map((block) => [block.pageId, block]));
 	const serverIds = new Set(pages.map((page) => page.pageId));
@@ -119,9 +125,9 @@ export function mergeBlocks(content: string, pages: readonly ServerPage[]): { co
 		}
 		anchor = block.end;
 		const serverUnchanged = matchesHash(page.text, block.hash);
-		if (isLocallyEdited(block)) {
+		if (isLocallyEdited(block) && !takeServer.has(page.pageId)) {
 			outcomes.push({ kind: serverUnchanged ? "local-edit" : "conflict", pageId: page.pageId });
-		} else if (serverUnchanged) {
+		} else if (serverUnchanged && !isLocallyEdited(block)) {
 			outcomes.push({ kind: "unchanged", pageId: page.pageId });
 		} else {
 			const { text, lost } = reapplyMarkup(block.text, normalizeText(page.text));

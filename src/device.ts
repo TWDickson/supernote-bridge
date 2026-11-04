@@ -1,5 +1,6 @@
 import { type App, Platform } from "obsidian";
 import { DEFAULT_SELECTION, normalizeSelection, type FolderSelection } from "./sync/selection";
+import type { SyncReport } from "./vault/SyncRunner";
 
 const PREFIX = "supernote-bridge:";
 
@@ -43,9 +44,9 @@ export class DeviceStore {
 		this.set("device-name", value.trim() || null);
 	}
 
-	/** Whether this device pulls from and pushes to the server. Only one device
-	 *  should: the rest receive the notes through Obsidian Sync. Off until the
-	 *  device signs in or the user turns it on. */
+	/** Whether this device pulls from and pushes to the server. Devices with it
+	 *  off receive the notes through Obsidian Sync. Off until the device signs
+	 *  in or the user turns it on. */
 	get syncsWithServer(): boolean {
 		return this.get<boolean>("syncs") === true;
 	}
@@ -56,6 +57,15 @@ export class DeviceStore {
 
 	/** Which device folders this device syncs. Per device, so a work laptop can
 	 *  leave folders out without changing what home syncs. */
+	/** What this device's last sync did, for the report view. */
+	get lastReport(): SyncReport | null {
+		return this.get<SyncReport>("last-report");
+	}
+
+	set lastReport(value: SyncReport | null) {
+		this.set("last-report", value);
+	}
+
 	get folderSelection(): FolderSelection {
 		return normalizeSelection(this.get("folders")) ?? DEFAULT_SELECTION;
 	}

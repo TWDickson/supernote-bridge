@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { type Editor, type MarkdownFileInfo, type MarkdownView, Notice, Plugin, TFile } from "obsidian";
 import { SupernoteClient } from "./api/client";
 import { AuthManager } from "./auth/AuthManager";
 import { CALLBACK_ACTION } from "./auth/oauth";
@@ -7,7 +7,10 @@ import { hideMarkers } from "./editor/hideMarkers";
 import { normalizeSettings, type SupernoteBridgeSettings } from "./settings/settings";
 import { SupernoteBridgeSettingTab } from "./settings/SettingsTab";
 import { settleObsidianSync } from "./vault/obsidianSync";
-import { SyncRunner, type SyncReport } from "./vault/SyncRunner";
+import { isLocallyEdited, parseBlocks } from "./sync/blocks";
+import { FM } from "./sync/schema";
+import { ConfirmModal, SyncReportModal } from "./vault/SyncReportModal";
+import { type PageRef, SyncRunner, type SyncReport } from "./vault/SyncRunner";
 
 /** How long a sync waits for Obsidian Sync to finish bringing in changes. */
 const OBSIDIAN_SYNC_WAIT_MS = 60_000;
@@ -77,9 +80,23 @@ export default class SupernoteBridgePlugin extends Plugin {
 				return true;
 			},
 		});
+		this.addCommand({ id: "show-sync-report", name: "Show the last sync report", callback: () => this.openReport() });
+		this.addCommand({
+			id: "take-server-text-at-cursor",
+			name: "Take the server's text for the page at the cursor",
+			editorCheckCallback: (checking, editor, ctx) => this.takeServerTextCommand(checking, editor, ctx, "cursor"),
+		});
+		this.addCommand({
+			id: "take-server-text-all",
+			name: "Take the server's text for every page edited in this note",
+			editorCheckCallback: (checking, editor, ctx) => this.takeServerTextCommand(checking, editor, ctx, "all"),
+		});
 		this.addRibbonIcon("refresh-cw", "Sync Supernote notebooks", () => void this.sync());
 
 		this.statusBar = this.addStatusBarItem();
+		this.statusBar.addClass("mod-clickable");
+		this.statusBar.setAttr("aria-label", "Show the last sync report");
+		this.statusBar.addEventListener("click", () => this.openReport());
 		this.showLastSync();
 	}
 
@@ -130,8 +147,13 @@ export default class SupernoteBridgePlugin extends Plugin {
 			}
 			this.statusBar?.setText("Supernote: syncing…");
 			const report = await this.runner.run();
-			this.device.lastSync = Date.now();
-			new Notice(summarize(report), report.errors.length || report.conflicts.length || report.lostMarkup.length ? 15000 : 5000);
+			this.device.lastSync = report.at;
+			this.device.lastReport = report;
+			const notice = new Notice(
+				`${summarize(report)}\nClick for the full report.`,
+				report.errors.length || report.conflicts.length || report.lostMarkup.length ? 15000 : 5000,
+			);
+			notice.messageEl.addEventListener("click", () => this.openReport());
 			if (report.errors.length) console.error("Supernote Bridge sync errors:", report.errors);
 		} catch (err) {
 			new Notice(`Sync failed: ${(err as Error).message}`);
@@ -139,6 +161,68 @@ export default class SupernoteBridgePlugin extends Plugin {
 			this.syncing = false;
 			this.showLastSync();
 		}
+	}
+
+	private openReport(): void {
+		new SyncReportModal({
+			app: this.app,
+			report: () => this.device.lastReport,
+			takeServerText: (path, pages) => this.takeServerText(path, pages),
+		}).open();
+	}
+
+	/** Drop the Obsidian edits on these pages for the server's text, and take
+	 *  them off the stored report. */
+	async takeServerText(path: string, pages: readonly PageRef[]): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) {
+			new Notice(`${path} isn't in the vault any more.`);
+			return;
+		}
+		if (!this.auth.isSignedIn() && !this.auth.hasAppToken()) {
+			new Notice("Sign in to the sync server first, in the plugin settings.");
+			return;
+		}
+		try {
+			const changed = await this.runner.takeServerText(file, pages.map((p) => p.pageId));
+			new Notice(changed ? `Took the server's text for ${changed} ${changed === 1 ? "page" : "pages"}.` : "Those pages already match the server.");
+		} catch (err) {
+			new Notice(`Couldn't take the server's text: ${(err as Error).message}`);
+			return;
+		}
+		const report = this.device.lastReport;
+		if (report) {
+			const ids = new Set(pages.map((p) => p.pageId));
+			for (const note of report.notes.filter((n) => n.path === path)) {
+				note.edited = note.edited.filter((p) => !ids.has(p.pageId));
+				note.conflicts = note.conflicts.filter((p) => !ids.has(p.pageId));
+			}
+			this.device.lastReport = report;
+		}
+	}
+
+	/** Edited pages in a synced note: the one at the cursor, or all of them. */
+	private takeServerTextCommand(checking: boolean, editor: Editor, ctx: MarkdownView | MarkdownFileInfo, scope: "cursor" | "all"): boolean {
+		const file = ctx.file;
+		if (!file || this.app.metadataCache.getFileCache(file)?.frontmatter?.[FM.fileId] === undefined) return false;
+		const blocks = parseBlocks(editor.getValue());
+		const offset = editor.posToOffset(editor.getCursor());
+		const pages: PageRef[] = blocks
+			.map((block, i) => ({ block, ref: { pageId: block.pageId, page: i + 1 } }))
+			.filter(({ block }) => isLocallyEdited(block) && (scope === "all" || (offset >= block.start && offset <= block.end)))
+			.map(({ ref }) => ref);
+		if (pages.length === 0) return false;
+		if (!checking) {
+			const what = scope === "all" ? `all ${pages.length} edited ${pages.length === 1 ? "page" : "pages"}` : "this page";
+			new ConfirmModal(
+				this.app,
+				`Replace your edits on ${what}?`,
+				"They get the server's current text. Links and tags you added stay where their words still are; any other change you made is lost.",
+				"Replace",
+				() => void this.takeServerText(file.path, pages),
+			).open();
+		}
+		return true;
 	}
 
 	private showLastSync(): void {

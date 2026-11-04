@@ -288,7 +288,7 @@ exists.
       (found in 0.1.0). Fine at ~30 notebooks; SV-2 makes it incremental.
 - [~] **PL-6** commands: *Sync now* ✅, sign in/out ✅, ribbon + status bar ✅;
       *Sync this note* / *Open on server* not yet
-- [ ] **PL-7** sync log note / modal with last run results
+- [x] **PL-7** "Last Supernote sync" report (modal, stored per device): per note, pages updated, edited pages kept, conflicts, links that no longer fit, errors; opened from the sync notice, the status bar or a command
 
 ### P2 — Structure (needs SV-3)
 - [ ] **PL-8** `title` and `page` split modes + index note
@@ -303,7 +303,7 @@ exists.
 ### P4 — Two-way text (needs SV-4, SV-5)
 - [ ] **PL-13** per-page base hashes, local-edit detection
 - [ ] **PL-14** push corrections (manual review list first, then auto)
-- [ ] **PL-15** conflict view; "take new OCR" when server flags `ocr_newer`
+- [~] **PL-15** conflict view; "take new OCR" when server flags `ocr_newer` — "Take server text" exists (report button + commands for the page at the cursor / every edited page), keeps added links; the `ocr_newer` flag still needs SV-4
 
 ### P5 — Extras
 - [ ] **PL-16** `supernote-page` image code block + cache

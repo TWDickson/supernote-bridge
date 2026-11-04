@@ -112,6 +112,40 @@ describe("SyncRunner", () => {
 		expect(vault.files.get(path)).toBe(fresh);
 	});
 
+	it("reports, note by note, which edited pages it kept and which also changed on the server", async () => {
+		server.setPages(BIG_ID, ["first idea", "second idea", "third idea"]);
+		await runner.run();
+		const path = "Supernote/Ideas.md";
+		vault.files.set(path, (vault.files.get(path) ?? "").replace("first idea", "first idea, fixed").replace("third idea", "third idea, fixed"));
+		server.setPages(BIG_ID, ["first idea", "second idea", "third idea, re-read"]);
+
+		const report = await runner.run();
+
+		expect(report.at).toBeGreaterThan(0);
+		expect(report.notes).toEqual([
+			{
+				path,
+				created: false,
+				updatedPages: 0,
+				edited: [{ pageId: `P${BIG_ID}-0`, page: 1 }],
+				conflicts: [{ pageId: `P${BIG_ID}-2`, page: 3 }],
+				lostMarkup: [],
+			},
+		]);
+	});
+
+	it("takes the server's text for chosen pages", async () => {
+		await runner.run();
+		const path = "Supernote/Ideas.md";
+		vault.files.set(path, (vault.files.get(path) ?? "").replace("second idea", "second idea, fixed"));
+		server.setPages(BIG_ID, ["first idea", "second idea, re-read"]);
+
+		const changed = await runner.takeServerText(vault.app.vault.getAbstractFileByPath(path) as never, [`P${BIG_ID}-1`]);
+
+		expect(changed).toBe(1);
+		expect(parseBlocks(vault.files.get(path) ?? "").map((b) => b.text)).toEqual(["first idea", "second idea, re-read"]);
+	});
+
 	it("joins wrapped lines, and rewrites notes written before the setting changed", async () => {
 		const wrapped = ["We walked along the river until the", "light started to fade over the hills."];
 		server.setPages("2", [wrapped.join("\n")]);
