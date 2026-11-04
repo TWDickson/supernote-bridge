@@ -16,7 +16,7 @@ export default defineConfig([
 		},
 		plugins: { "@typescript-eslint": tseslint.plugin },
 		rules: {
-			"obsidianmd/ui/sentence-case": ["warn", { brands: ["Supernote", "Obsidian"] }],
+			"obsidianmd/ui/sentence-case": ["warn", { brands: ["Supernote", "Obsidian", "Obsidian Sync"] }],
 			"@typescript-eslint/no-unused-vars": [
 				"error",
 				{ argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },

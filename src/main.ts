@@ -6,7 +6,11 @@ import { DeviceStore } from "./device";
 import { hideMarkers } from "./editor/hideMarkers";
 import { normalizeSettings, type SupernoteBridgeSettings } from "./settings/settings";
 import { SupernoteBridgeSettingTab } from "./settings/SettingsTab";
+import { settleObsidianSync } from "./vault/obsidianSync";
 import { SyncRunner, type SyncReport } from "./vault/SyncRunner";
+
+/** How long a sync waits for Obsidian Sync to finish bringing in changes. */
+const OBSIDIAN_SYNC_WAIT_MS = 60_000;
 
 export default class SupernoteBridgePlugin extends Plugin {
 	declare settings: SupernoteBridgeSettings;
@@ -113,8 +117,18 @@ export default class SupernoteBridgePlugin extends Plugin {
 			return;
 		}
 		this.syncing = true;
-		this.statusBar?.setText("Supernote: syncing…");
 		try {
+			const obsidianSync = await settleObsidianSync(this.app, OBSIDIAN_SYNC_WAIT_MS, () =>
+				this.statusBar?.setText("Supernote: waiting for Obsidian Sync…"),
+			);
+			if (obsidianSync === "syncing") {
+				new Notice("Obsidian Sync is still bringing in changes. Try the Supernote sync again once it's done.");
+				return;
+			}
+			if (obsidianSync === "paused" || obsidianSync === "error" || obsidianSync === "disconnected") {
+				new Notice(`Obsidian Sync is ${obsidianSync}, so edits from your other devices may not be here yet. Syncing from the server anyway.`);
+			}
+			this.statusBar?.setText("Supernote: syncing…");
 			const report = await this.runner.run();
 			this.device.lastSync = Date.now();
 			new Notice(summarize(report), report.errors.length || report.conflicts.length || report.lostMarkup.length ? 15000 : 5000);
