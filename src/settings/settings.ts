@@ -31,6 +31,12 @@ export const DEFAULT_SETTINGS: SupernoteBridgeSettings = {
 };
 
 const SPLIT_MODES: readonly SplitMode[] = ["notebook", "title", "page"];
+
+export const SPLIT_LABELS: Record<SplitMode, string> = {
+	notebook: "Per notebook",
+	title: "Per title",
+	page: "Per page",
+};
 /**
  * The device's four title styles, keyed by the TITLESTYLE code stored with
  * each title. (TITLELEVEL is always 1, so it can't tell them apart.) The code
@@ -51,18 +57,11 @@ function normalizeRule(raw: unknown): FolderRule[] {
 	if (typeof r.supernotePrefix !== "string" || typeof r.vaultFolder !== "string") return [];
 	const rule: FolderRule = { supernotePrefix: r.supernotePrefix, vaultFolder: r.vaultFolder };
 	if (SPLIT_MODES.includes(r.splitMode as SplitMode)) rule.splitMode = r.splitMode as SplitMode;
-	if (Array.isArray(r.splitTitleStyles)) {
+	if (rule.splitMode === "title" && Array.isArray(r.splitTitleStyles)) {
 		rule.splitTitleStyles = TITLE_STYLE_CODES.filter((code) => (r.splitTitleStyles as unknown[]).includes(code));
 	}
-	return [rule];
-}
-
-/** How a notebook placed by `rule` (or by no rule) is split. */
-export function splitFor(rule: FolderRule | null, settings: SupernoteBridgeSettings): { mode: SplitMode; titleStyles: string[] } {
-	return {
-		mode: rule?.splitMode ?? settings.splitMode,
-		titleStyles: rule?.splitTitleStyles ?? settings.splitTitleStyles,
-	};
+	/* A rule must set something: a location, a split, or both. */
+	return rule.vaultFolder.trim() !== "" || rule.splitMode !== undefined ? [rule] : [];
 }
 
 /** Merge stored data over the defaults, dropping anything malformed, so the

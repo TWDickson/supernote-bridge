@@ -55,7 +55,7 @@ export default class SupernoteBridgePlugin extends Plugin {
 			} catch (err) {
 				new Notice((err as Error).message);
 			}
-			this.settingTab.update();
+			this.settingTab.refreshFolders();
 		});
 
 		this.addCommand({ id: "sync-now", name: "Sync now", callback: () => void this.sync() });

@@ -1,9 +1,11 @@
-import type { SplitMode } from "../settings/settings";
+import type { SplitMode, SupernoteBridgeSettings } from "../settings/settings";
 
-/** A user rule: notebooks under `supernotePrefix` land in `vaultFolder`,
- *  optionally split their own way. */
+/** A user rule for a device folder and its subfolders: where their notebooks
+ *  land, how they split, or both. Each part left unset is inherited from the
+ *  nearest folder above that sets it, or from the defaults. */
 export interface FolderRule {
 	supernotePrefix: string;
+	/** Empty: the location is inherited. */
 	vaultFolder: string;
 	/** Absent: the default split mode applies. */
 	splitMode?: SplitMode;
@@ -42,8 +44,13 @@ function isUnder(path: string, prefix: string): boolean {
  * the leading `Note` folder.
  */
 export function vaultFolderFor(notebookPath: string, rules: readonly FolderRule[], defaultRoot: string): string {
-	const folder = cleanPath(notebookPath).split("/").slice(0, -1).join("/");
-	const rule = ruleFor(notebookPath, rules);
+	return folderLocation(parentOf(notebookPath), rules, defaultRoot);
+}
+
+/** Vault folder for a device folder's own notebooks. */
+export function folderLocation(devicePath: string, rules: readonly FolderRule[], defaultRoot: string): string {
+	const folder = cleanPath(devicePath);
+	const rule = nearestRule(folder, rules, (r) => r.vaultFolder !== "");
 	if (rule === null) {
 		const mirrored = isUnder(folder, NOTEBOOK_ROOT) ? folder.slice(NOTEBOOK_ROOT.length) : folder;
 		return cleanPath(`${defaultRoot}/${mirrored}`);
@@ -53,13 +60,49 @@ export function vaultFolderFor(notebookPath: string, rules: readonly FolderRule[
 	return cleanPath(`${rule.vaultFolder}/${rest}`);
 }
 
-/** The rule that places a notebook: the one with the longest matching prefix. */
+/** The rule that decides where a notebook goes: the most specific one that sets a location. */
 export function ruleFor(notebookPath: string, rules: readonly FolderRule[]): FolderRule | null {
-	const folder = cleanPath(notebookPath).split("/").slice(0, -1).join("/");
+	return nearestRule(parentOf(notebookPath), rules, (r) => r.vaultFolder !== "");
+}
+
+/** How a device folder's notebooks split: the most specific rule that sets a split, or the default. */
+export function folderSplit(devicePath: string, settings: SupernoteBridgeSettings): { mode: SplitMode; titleStyles: string[] } {
+	const rule = nearestRule(cleanPath(devicePath), settings.folderRules, (r) => r.splitMode !== undefined);
+	return {
+		mode: rule?.splitMode ?? settings.splitMode,
+		titleStyles: rule?.splitTitleStyles ?? settings.splitTitleStyles,
+	};
+}
+
+/** The rule written for exactly this folder, if any. */
+export function ownRule(devicePath: string, rules: readonly FolderRule[]): FolderRule | null {
+	const folder = cleanPath(devicePath);
+	return rules.find((rule) => cleanPath(rule.supernotePrefix) === folder) ?? null;
+}
+
+/** Rules with the one for `devicePath` changed by `patch`. A rule left setting
+ *  nothing is removed. */
+export function withRule(rules: readonly FolderRule[], devicePath: string, patch: Partial<Omit<FolderRule, "supernotePrefix">>): FolderRule[] {
+	const prefix = cleanPath(devicePath);
+	const current = ownRule(prefix, rules) ?? { supernotePrefix: prefix, vaultFolder: "" };
+	const next: FolderRule = { ...current, ...patch, supernotePrefix: prefix };
+	next.vaultFolder = cleanPath(next.vaultFolder);
+	if (next.splitMode === undefined || next.splitMode !== "title") delete next.splitTitleStyles;
+	if (next.splitMode === undefined) delete next.splitMode;
+	const others = rules.filter((rule) => cleanPath(rule.supernotePrefix) !== prefix);
+	const keep = next.vaultFolder !== "" || next.splitMode !== undefined;
+	return (keep ? [...others, next] : others).sort((a, b) => a.supernotePrefix.localeCompare(b.supernotePrefix));
+}
+
+function parentOf(notebookPath: string): string {
+	return cleanPath(notebookPath).split("/").slice(0, -1).join("/");
+}
+
+function nearestRule(folder: string, rules: readonly FolderRule[], applies: (rule: FolderRule) => boolean): FolderRule | null {
 	let best: FolderRule | null = null;
 	for (const rule of rules) {
 		const prefix = cleanPath(rule.supernotePrefix);
-		if (!isUnder(folder, prefix)) continue;
+		if (!applies(rule) || !isUnder(folder, prefix)) continue;
 		if (best === null || prefix.length > cleanPath(best.supernotePrefix).length) best = rule;
 	}
 	return best;

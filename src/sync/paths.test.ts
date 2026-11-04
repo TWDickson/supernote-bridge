@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanPath, notebookName, vaultFolderFor, type FolderRule } from "./paths";
+import { cleanPath, folderLocation, notebookName, ownRule, ruleFor, vaultFolderFor, withRule, type FolderRule } from "./paths";
 
 describe("cleanPath", () => {
 	it("collapses and trims separators", () => {
@@ -45,5 +45,33 @@ describe("vaultFolderFor", () => {
 describe("notebookName", () => {
 	it("drops the folder and the .note extension", () => {
 		expect(notebookName("Note/Work/Plan.note")).toBe("Plan");
+	});
+});
+
+describe("rules set per folder", () => {
+	const rules = [
+		{ supernotePrefix: "Note/Work", vaultFolder: "Work/Planners" },
+		{ supernotePrefix: "Note/Work/Weeks", vaultFolder: "", splitMode: "page" as const },
+	];
+
+	it("inherit the location from the folder above when they only set a split", () => {
+		expect(folderLocation("Note/Work/Weeks", rules, "Supernote")).toBe("Work/Planners/Weeks");
+		expect(ruleFor("Note/Work/Weeks/2026-W45.note", rules)?.supernotePrefix).toBe("Note/Work");
+	});
+
+	it("are added, changed and removed through withRule", () => {
+		const added = withRule(rules, "Note/Journal", { vaultFolder: "Journal/" });
+		expect(ownRule("Note/Journal", added)).toEqual({ supernotePrefix: "Note/Journal", vaultFolder: "Journal" });
+
+		const moved = withRule(added, "Note/Work/Weeks", { vaultFolder: "Work/Weekly" });
+		expect(ownRule("Note/Work/Weeks", moved)).toEqual({ supernotePrefix: "Note/Work/Weeks", vaultFolder: "Work/Weekly", splitMode: "page" });
+
+		const cleared = withRule(moved, "Note/Work/Weeks", { vaultFolder: "", splitMode: undefined });
+		expect(ownRule("Note/Work/Weeks", cleared)).toBeNull();
+	});
+
+	it("drop title styles unless they split by title", () => {
+		const next = withRule([], "Note/Work", { splitMode: "title", splitTitleStyles: ["1157254"] });
+		expect(withRule(next, "Note/Work", { splitMode: "page" })).toEqual([{ supernotePrefix: "Note/Work", vaultFolder: "", splitMode: "page" }]);
 	});
 });

@@ -5,11 +5,9 @@
 	font-size: var(--font-ui-small);
 }
 
-/* Folder picker */
-.snb-folder-list {
-	max-height: 50vh;
-	overflow-y: auto;
-	margin-bottom: var(--size-4-4);
+/* Folder tree (settings) */
+.snb-folder-tree-setting {
+	display: block;
 }
 
 .snb-folder-row {
@@ -29,6 +27,57 @@
 	align-items: center;
 	gap: var(--size-2-3);
 	cursor: pointer;
+	min-width: 0;
+}
+
+/* Where the folder's notebooks go; the button that opens its rule. */
+.snb-folder-summary {
+	margin-left: auto;
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	background: none;
+	box-shadow: none;
+	border: 1px solid transparent;
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+	padding: var(--size-2-1) var(--size-2-3);
+	height: auto;
+	cursor: pointer;
+}
+
+.snb-folder-summary:hover,
+.snb-folder-summary.is-active {
+	border-color: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.snb-folder-summary.snb-own {
+	color: var(--text-muted);
+	font-weight: var(--font-semibold);
+}
+
+.snb-folder-panel {
+	margin: var(--size-2-2) 0 var(--size-4-2) calc(var(--snb-depth, 1) * var(--size-4-6));
+	padding: var(--size-2-2) var(--size-4-3);
+	border-left: 2px solid var(--interactive-accent);
+	background: var(--background-secondary);
+	border-radius: var(--radius-s);
+}
+
+/* On a phone the destination drops under the folder name. */
+@media (max-width: 600px) {
+	.snb-folder-row {
+		flex-wrap: wrap;
+	}
+
+	.snb-folder-summary {
+		margin-left: calc(var(--size-4-6) + var(--size-2-2));
+		flex-basis: 100%;
+		text-align: left;
+	}
 }
 
 /* Title style swatches: the device's own greys, so these stay fixed colours

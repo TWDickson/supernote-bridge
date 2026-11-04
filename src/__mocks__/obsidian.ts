@@ -96,25 +96,27 @@ export class MemoryVault {
 export class FakeEl {
 	children: FakeEl[] = [];
 	text = "";
+	cls = "";
 	checked = false;
 	indeterminate = false;
 	private listeners = new Map<string, () => void>();
 
 	constructor(public tag = "div") {}
 
-	createEl(tag: string, opts: { text?: string } = {}): FakeEl {
+	createEl(tag: string, opts: { text?: string; cls?: string } = {}): FakeEl {
 		return this.add(tag, opts);
 	}
-	private add(tag: string, opts: { text?: string }): FakeEl {
+	private add(tag: string, opts: { text?: string; cls?: string }): FakeEl {
 		const el = new FakeEl(tag);
 		el.text = opts.text ?? "";
+		el.cls = opts.cls ?? "";
 		this.children.push(el);
 		return el;
 	}
-	createDiv(opts: { text?: string } = {}): FakeEl {
+	createDiv(opts: { text?: string; cls?: string } = {}): FakeEl {
 		return this.add("div", opts);
 	}
-	createSpan(opts: { text?: string } = {}): FakeEl {
+	createSpan(opts: { text?: string; cls?: string } = {}): FakeEl {
 		return this.add("span", opts);
 	}
 	empty(): void {
@@ -136,6 +138,9 @@ export class FakeEl {
 }
 
 export function setIcon(): void {}
+
+export class AbstractInputSuggest {}
+export class Setting {}
 
 export const editorLivePreviewField = undefined;
 

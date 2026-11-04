@@ -276,7 +276,7 @@ exists.
       page keeps following the server, and its markup is re-applied to new
       text; markup whose words are gone is reported.
 - [x] **PL-2** list notebooks under configured Supernote roots
-- [x] **PL-3** folder rules (device folder → vault folder, longest prefix wins, subfolders mirrored) with a settings editor; synced in `data.json` so every device places a notebook the same way. "Move existing notes here" moves a rule's notes on request (never automatically, so hand-moved notes aren't fought over)
+- [x] **PL-3** folder rules (device folder → vault folder, longest prefix wins, subfolders mirrored) edited inline in the settings folder tree (each row: this device's sync box + where it lands, click to set its vault folder/split; location and split inherit separately); synced in `data.json` so every device places a notebook the same way. "Move existing notes here" moves a rule's notes on request (never automatically, so hand-moved notes aren't fought over)
 - [x] **PL-4** `notebook` split mode, transcript → managed blocks, frontmatter
 - [x] **PL-5** idempotent re-sync (rewrite only changed blocks; preserve outside text)
 - [x] **PL-6a** (0.1.1) folder selection is **per device** (`DeviceStore`),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, normalizeSettings, splitFor } from "./settings";
+import { folderSplit } from "../sync/paths";
+import { DEFAULT_SETTINGS, normalizeSettings } from "./settings";
 
 describe("normalizeSettings", () => {
 	it("returns defaults for empty data", () => {
@@ -40,11 +41,25 @@ describe("folder rules", () => {
 		]);
 	});
 
-	it("split their own way, or fall back to the default", () => {
-		expect(splitFor({ supernotePrefix: "Note/Work", vaultFolder: "W", splitMode: "page" }, DEFAULT_SETTINGS)).toEqual({
-			mode: "page",
-			titleStyles: DEFAULT_SETTINGS.splitTitleStyles,
+	it("drop a rule that sets nothing, and keep one that only sets a split", () => {
+		const { folderRules } = normalizeSettings({
+			folderRules: [
+				{ supernotePrefix: "Note/Empty", vaultFolder: "" },
+				{ supernotePrefix: "Note/Work/Weeks", vaultFolder: "", splitMode: "page" },
+			],
 		});
-		expect(splitFor(null, DEFAULT_SETTINGS).mode).toBe(DEFAULT_SETTINGS.splitMode);
+		expect(folderRules).toEqual([{ supernotePrefix: "Note/Work/Weeks", vaultFolder: "", splitMode: "page" }]);
+	});
+
+	it("split their own way, or inherit from the folder above, or the default", () => {
+		const settings = {
+			...DEFAULT_SETTINGS,
+			folderRules: [
+				{ supernotePrefix: "Note/Work", vaultFolder: "W", splitMode: "page" as const },
+				{ supernotePrefix: "Note/Work/Weeks", vaultFolder: "Weekly" },
+			],
+		};
+		expect(folderSplit("Note/Work/Weeks", settings).mode).toBe("page");
+		expect(folderSplit("Note/Journal", settings).mode).toBe(DEFAULT_SETTINGS.splitMode);
 	});
 });
