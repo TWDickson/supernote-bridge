@@ -15,6 +15,9 @@ export interface SupernoteBridgeSettings {
 	/** Title styles (the device's TITLESTYLE codes) that start a new note in
 	 *  `title` mode. A set, not a depth: people pick title styles by look. */
 	splitTitleStyles: string[];
+	/** Join lines that wrapped only because the handwriting reached the page
+	 *  edge. The server's text keeps the device's lines either way. */
+	reflowProse: boolean;
 }
 
 export const DEFAULT_SETTINGS: SupernoteBridgeSettings = {
@@ -24,6 +27,7 @@ export const DEFAULT_SETTINGS: SupernoteBridgeSettings = {
 	folderRules: [],
 	splitMode: "title",
 	splitTitleStyles: ["1000254"],
+	reflowProse: true,
 };
 
 const SPLIT_MODES: readonly SplitMode[] = ["notebook", "title", "page"];
@@ -71,5 +75,6 @@ export function normalizeSettings(raw: unknown): SupernoteBridgeSettings {
 			: DEFAULT_SETTINGS.splitMode,
 		// An empty selection is kept: it means "no title splits" and the user chose it.
 		splitTitleStyles: styles ?? [...DEFAULT_SETTINGS.splitTitleStyles],
+		reflowProse: typeof data.reflowProse === "boolean" ? data.reflowProse : DEFAULT_SETTINGS.reflowProse,
 	};
 }

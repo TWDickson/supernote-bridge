@@ -5,6 +5,7 @@ import type { SupernoteBridgeSettings } from "../settings/settings";
 import { mergeBlocks, type PageOutcome, type ServerPage } from "../sync/blocks";
 import { cleanPath, notebookName, vaultFolderFor } from "../sync/paths";
 import { isSelected, shouldWalkInto, type FolderSelection } from "../sync/selection";
+import { reflowText } from "../sync/reflow";
 import { FM, LEGACY_MD5_KEY, renderNewNote } from "../sync/schema";
 
 interface Notebook {
@@ -65,7 +66,7 @@ export class SyncRunner {
 		}
 		const pages: ServerPage[] = [...transcript]
 			.sort((a, b) => a.pageIndex - b.pageIndex)
-			.map((p) => ({ pageId: p.pageId, text: p.text ?? "" }));
+			.map((p) => ({ pageId: p.pageId, text: this.settings().reflowProse ? reflowText(p.text ?? "") : (p.text ?? "") }));
 		const syncedAt = new Date().toISOString();
 
 		if (!existing) {

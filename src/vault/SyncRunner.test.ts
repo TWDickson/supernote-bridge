@@ -99,6 +99,21 @@ describe("SyncRunner", () => {
 		]);
 	});
 
+	it("joins wrapped lines, and rewrites notes written before the setting changed", async () => {
+		const wrapped = ["We walked along the river until the", "light started to fade over the hills."];
+		server.setPages("2", [wrapped.join("\n")]);
+		settings.reflowProse = false;
+		await runner.run();
+		expect(parseBlocks(vault.files.get("Work/Handwritten/Plan.md") ?? "")[0]?.text).toBe(wrapped.join("\n"));
+
+		settings.reflowProse = true;
+		const report = await runner.run();
+
+		expect(report).toMatchObject({ updated: 1, localEdits: 0, conflicts: [] });
+		expect(parseBlocks(vault.files.get("Work/Handwritten/Plan.md") ?? "")[0]?.text).toBe(wrapped.join(" "));
+		expect(await runner.run()).toMatchObject({ updated: 0 });
+	});
+
 	it("updates text from the server, keeps local corrections, and finds moved notes", async () => {
 		await runner.run();
 		vault.move("Supernote/Ideas.md", "Elsewhere/Renamed.md");

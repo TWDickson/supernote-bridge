@@ -137,6 +137,8 @@ export class FakeEl {
 
 export function setIcon(): void {}
 
+export const editorLivePreviewField = undefined;
+
 /** Mirrors Obsidian's Modal.open(): it overwrites `this.selection` with the
  *  saved text selection right before calling onOpen(). */
 export class Modal {

@@ -3,6 +3,7 @@ import { SupernoteClient } from "./api/client";
 import { AuthManager } from "./auth/AuthManager";
 import { CALLBACK_ACTION } from "./auth/oauth";
 import { DeviceStore } from "./device";
+import { hideMarkers } from "./editor/hideMarkers";
 import { normalizeSettings, type SupernoteBridgeSettings } from "./settings/settings";
 import { SupernoteBridgeSettingTab } from "./settings/SettingsTab";
 import { SyncRunner, type SyncReport } from "./vault/SyncRunner";
@@ -36,6 +37,8 @@ export default class SupernoteBridgePlugin extends Plugin {
 			() => this.settings,
 			() => this.device.folderSelection,
 		);
+
+		this.registerEditorExtension(hideMarkers());
 
 		this.settingTab = new SupernoteBridgeSettingTab(this.app, this);
 		this.addSettingTab(this.settingTab);

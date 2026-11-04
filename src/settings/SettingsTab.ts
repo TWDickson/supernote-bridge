@@ -132,6 +132,11 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 				heading: "Advanced",
 				items: [
 					{
+						name: "Join wrapped lines",
+						desc: "Handwriting breaks a sentence wherever the page ends. When on, those lines are joined into paragraphs; lists, task marks and planner times keep their own lines. Changing this rewrites synced pages at the next sync, except pages you've edited in Obsidian, which are kept as they are. Corrections you send back later will use the joined text.",
+						control: { type: "toggle", key: "reflowProse" },
+					},
+					{
 						name: "App token",
 						desc: "Instead of signing in, use a token created on the server under settings → app tokens. Signing in takes precedence.",
 						control: { type: "secret", key: "tokenSecretId" },
