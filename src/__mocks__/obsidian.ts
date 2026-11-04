@@ -91,3 +91,65 @@ export class MemoryVault {
 		this.files.set(to, content);
 	}
 }
+
+/** A DOM element with just the helpers the plugin's modals call. */
+export class FakeEl {
+	children: FakeEl[] = [];
+	text = "";
+	checked = false;
+	indeterminate = false;
+	private listeners = new Map<string, () => void>();
+
+	constructor(public tag = "div") {}
+
+	createEl(tag: string, opts: { text?: string } = {}): FakeEl {
+		return this.add(tag, opts);
+	}
+	private add(tag: string, opts: { text?: string }): FakeEl {
+		const el = new FakeEl(tag);
+		el.text = opts.text ?? "";
+		this.children.push(el);
+		return el;
+	}
+	createDiv(opts: { text?: string } = {}): FakeEl {
+		return this.add("div", opts);
+	}
+	createSpan(opts: { text?: string } = {}): FakeEl {
+		return this.add("span", opts);
+	}
+	empty(): void {
+		this.children = [];
+	}
+	addClass(): void {}
+	setCssProps(): void {}
+	setAttr(): void {}
+	addEventListener(type: string, fn: () => void): void {
+		this.listeners.set(type, fn);
+	}
+	fire(type: string): void {
+		this.listeners.get(type)?.();
+	}
+	/** Every element below this one, depth first. */
+	all(): FakeEl[] {
+		return this.children.flatMap((child) => [child, ...child.all()]);
+	}
+}
+
+export function setIcon(): void {}
+
+/** Mirrors Obsidian's Modal.open(): it overwrites `this.selection` with the
+ *  saved text selection right before calling onOpen(). */
+export class Modal {
+	contentEl = new FakeEl();
+	selection: unknown;
+	constructor(public app: unknown) {}
+	setTitle(): this {
+		return this;
+	}
+	open(): void {
+		this.selection = null;
+		void this.onOpen();
+	}
+	close(): void {}
+	async onOpen(): Promise<void> {}
+}

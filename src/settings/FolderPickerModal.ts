@@ -14,7 +14,9 @@ interface FolderNode {
 /** Pick which device folders this device syncs, from the server's real tree.
  *  Folders load as they're expanded. */
 export class FolderPickerModal extends Modal {
-	private selection: FolderSelection;
+	/* Not `selection`: Modal.open() writes its own `this.selection` (the saved
+	   text selection) just before onOpen(). */
+	private picked: FolderSelection;
 	private roots: FolderNode[] | null = null;
 	private listEl!: HTMLElement;
 
@@ -25,7 +27,7 @@ export class FolderPickerModal extends Modal {
 		private readonly onSave: (selection: FolderSelection) => void,
 	) {
 		super(app);
-		this.selection = { include: [...initial.include], exclude: [...initial.exclude] };
+		this.picked = { include: [...initial.include], exclude: [...initial.exclude] };
 	}
 
 	override async onOpen(): Promise<void> {
@@ -42,7 +44,7 @@ export class FolderPickerModal extends Modal {
 		buttons.createEl("button", { text: "Cancel" }).addEventListener("click", () => this.close());
 		const save = buttons.createEl("button", { cls: "mod-cta", text: "Save" });
 		save.addEventListener("click", () => {
-			this.onSave(this.selection);
+			this.onSave(this.picked);
 			this.close();
 		});
 
@@ -105,12 +107,12 @@ export class FolderPickerModal extends Modal {
 
 		const label = row.createEl("label", { cls: "snb-folder-label" });
 		const box = label.createEl("input", { type: "checkbox" });
-		const state = subtreeState(node.path, this.selection);
+		const state = subtreeState(node.path, this.picked);
 		box.checked = state === "on";
 		box.indeterminate = state === "mixed";
 		box.addEventListener("change", () => {
 			/* A mixed folder turns fully on, like a file manager's checkbox. */
-			this.selection = setFolder(this.selection, node.path, state !== "on");
+			this.picked = setFolder(this.picked, node.path, state !== "on");
 			this.render();
 		});
 		label.createSpan({ text: node.name });
