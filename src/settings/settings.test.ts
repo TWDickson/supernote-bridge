@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, normalizeSettings } from "./settings";
+import { DEFAULT_SETTINGS, normalizeSettings, splitFor } from "./settings";
 
 describe("normalizeSettings", () => {
 	it("returns defaults for empty data", () => {
@@ -21,5 +21,30 @@ describe("normalizeSettings", () => {
 
 	it("replaces 0.1.0's numeric title levels with the default", () => {
 		expect(normalizeSettings({ splitTitleStyles: [1] }).splitTitleStyles).toEqual(DEFAULT_SETTINGS.splitTitleStyles);
+	});
+});
+
+describe("folder rules", () => {
+	it("keep a valid split and title styles, and drop bad ones", () => {
+		const { folderRules } = normalizeSettings({
+			folderRules: [
+				{ supernotePrefix: "Note/Work/Weeks", vaultFolder: "Work/Weekly", splitMode: "page" },
+				{ supernotePrefix: "Note/Work", vaultFolder: "Work/Planners", splitMode: "title", splitTitleStyles: ["1157254", "bogus"] },
+				{ supernotePrefix: "Note/Journal", vaultFolder: "Journal", splitMode: "chapter" },
+			],
+		});
+		expect(folderRules).toEqual([
+			{ supernotePrefix: "Note/Work/Weeks", vaultFolder: "Work/Weekly", splitMode: "page" },
+			{ supernotePrefix: "Note/Work", vaultFolder: "Work/Planners", splitMode: "title", splitTitleStyles: ["1157254"] },
+			{ supernotePrefix: "Note/Journal", vaultFolder: "Journal" },
+		]);
+	});
+
+	it("split their own way, or fall back to the default", () => {
+		expect(splitFor({ supernotePrefix: "Note/Work", vaultFolder: "W", splitMode: "page" }, DEFAULT_SETTINGS)).toEqual({
+			mode: "page",
+			titleStyles: DEFAULT_SETTINGS.splitTitleStyles,
+		});
+		expect(splitFor(null, DEFAULT_SETTINGS).mode).toBe(DEFAULT_SETTINGS.splitMode);
 	});
 });

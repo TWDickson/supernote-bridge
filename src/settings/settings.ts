@@ -46,20 +46,32 @@ export const TITLE_STYLES = [
 
 const TITLE_STYLE_CODES: readonly string[] = TITLE_STYLES.map((style) => style.code);
 
+function normalizeRule(raw: unknown): FolderRule[] {
+	const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+	if (typeof r.supernotePrefix !== "string" || typeof r.vaultFolder !== "string") return [];
+	const rule: FolderRule = { supernotePrefix: r.supernotePrefix, vaultFolder: r.vaultFolder };
+	if (SPLIT_MODES.includes(r.splitMode as SplitMode)) rule.splitMode = r.splitMode as SplitMode;
+	if (Array.isArray(r.splitTitleStyles)) {
+		rule.splitTitleStyles = TITLE_STYLE_CODES.filter((code) => (r.splitTitleStyles as unknown[]).includes(code));
+	}
+	return [rule];
+}
+
+/** How a notebook placed by `rule` (or by no rule) is split. */
+export function splitFor(rule: FolderRule | null, settings: SupernoteBridgeSettings): { mode: SplitMode; titleStyles: string[] } {
+	return {
+		mode: rule?.splitMode ?? settings.splitMode,
+		titleStyles: rule?.splitTitleStyles ?? settings.splitTitleStyles,
+	};
+}
+
 /** Merge stored data over the defaults, dropping anything malformed, so the
  *  rest of the plugin can trust every field. */
 export function normalizeSettings(raw: unknown): SupernoteBridgeSettings {
 	const data = (raw && typeof raw === "object" ? raw : {}) as Partial<Record<keyof SupernoteBridgeSettings, unknown>>;
 	const str = (value: unknown, fallback: string) => (typeof value === "string" ? value : fallback);
 
-	const rules = Array.isArray(data.folderRules)
-		? data.folderRules.filter(
-				(rule): rule is FolderRule =>
-					!!rule &&
-					typeof (rule as FolderRule).supernotePrefix === "string" &&
-					typeof (rule as FolderRule).vaultFolder === "string",
-			)
-		: [];
+	const rules = Array.isArray(data.folderRules) ? data.folderRules.flatMap(normalizeRule) : [];
 	/* 0.1.0 stored TITLELEVEL numbers, which never varied; those fall back to the default. */
 	const styles = Array.isArray(data.splitTitleStyles) && data.splitTitleStyles.every((v) => typeof v === "string")
 		? TITLE_STYLE_CODES.filter((code) => (data.splitTitleStyles as string[]).includes(code))
@@ -69,7 +81,7 @@ export function normalizeSettings(raw: unknown): SupernoteBridgeSettings {
 		serverUrl: str(data.serverUrl, DEFAULT_SETTINGS.serverUrl).trim().replace(/\/+$/, ""),
 		tokenSecretId: str(data.tokenSecretId, DEFAULT_SETTINGS.tokenSecretId),
 		vaultRoot: str(data.vaultRoot, DEFAULT_SETTINGS.vaultRoot),
-		folderRules: rules.map(({ supernotePrefix, vaultFolder }) => ({ supernotePrefix, vaultFolder })),
+		folderRules: rules,
 		splitMode: SPLIT_MODES.includes(data.splitMode as SplitMode)
 			? (data.splitMode as SplitMode)
 			: DEFAULT_SETTINGS.splitMode,

@@ -1,7 +1,14 @@
-/** A user rule: notebooks under `supernotePrefix` land in `vaultFolder`. */
+import type { SplitMode } from "../settings/settings";
+
+/** A user rule: notebooks under `supernotePrefix` land in `vaultFolder`,
+ *  optionally split their own way. */
 export interface FolderRule {
 	supernotePrefix: string;
 	vaultFolder: string;
+	/** Absent: the default split mode applies. */
+	splitMode?: SplitMode;
+	/** Title styles that start a note in `title` mode; absent: the default set. */
+	splitTitleStyles?: string[];
 }
 
 /** Collapse repeated slashes and trim leading/trailing ones. Mirrors what
@@ -36,22 +43,26 @@ function isUnder(path: string, prefix: string): boolean {
  */
 export function vaultFolderFor(notebookPath: string, rules: readonly FolderRule[], defaultRoot: string): string {
 	const folder = cleanPath(notebookPath).split("/").slice(0, -1).join("/");
-
-	let best: { prefix: string; target: string } | null = null;
-	for (const rule of rules) {
-		const prefix = cleanPath(rule.supernotePrefix);
-		if (!isUnder(folder, prefix)) continue;
-		if (best === null || prefix.length > best.prefix.length) {
-			best = { prefix, target: cleanPath(rule.vaultFolder) };
-		}
-	}
-
-	if (best === null) {
+	const rule = ruleFor(notebookPath, rules);
+	if (rule === null) {
 		const mirrored = isUnder(folder, NOTEBOOK_ROOT) ? folder.slice(NOTEBOOK_ROOT.length) : folder;
 		return cleanPath(`${defaultRoot}/${mirrored}`);
 	}
-	const rest = best.prefix === "" ? folder : folder.slice(best.prefix.length);
-	return cleanPath(`${best.target}/${rest}`);
+	const prefix = cleanPath(rule.supernotePrefix);
+	const rest = prefix === "" ? folder : folder.slice(prefix.length);
+	return cleanPath(`${rule.vaultFolder}/${rest}`);
+}
+
+/** The rule that places a notebook: the one with the longest matching prefix. */
+export function ruleFor(notebookPath: string, rules: readonly FolderRule[]): FolderRule | null {
+	const folder = cleanPath(notebookPath).split("/").slice(0, -1).join("/");
+	let best: FolderRule | null = null;
+	for (const rule of rules) {
+		const prefix = cleanPath(rule.supernotePrefix);
+		if (!isUnder(folder, prefix)) continue;
+		if (best === null || prefix.length > cleanPath(best.supernotePrefix).length) best = rule;
+	}
+	return best;
 }
 
 /** Notebook display name from its Supernote path: `Note/Work/Plan.note` → `Plan`. */

@@ -1,7 +1,10 @@
 import { type App, Notice, PluginSettingTab, type SettingDefinitionItem } from "obsidian";
 import type SupernoteBridgePlugin from "../main";
 import { describeSelection } from "../sync/selection";
+import type { FolderRule } from "../sync/paths";
+import { applyMoves, placedNotes, planMoves } from "../vault/moveNotes";
 import { FolderPickerModal } from "./FolderPickerModal";
+import { ConfirmMoveModal, RuleModal, SPLIT_LABELS } from "./RuleModal";
 import { TITLE_STYLES, type SupernoteBridgeSettings } from "./settings";
 
 /* Settings kept per device rather than in the synced settings get a virtual
@@ -94,7 +97,7 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 					},
 					{
 						name: "Split notebooks",
-						desc: "One note per notebook, per title, or per page. For now every notebook syncs as one note; splitting arrives in a later version.",
+						desc: "One note per notebook, per title, or per page, unless a folder rule says otherwise. For now every notebook syncs as one note; splitting arrives in a later version.",
 						control: {
 							type: "dropdown",
 							key: "splitMode",
@@ -102,6 +105,31 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 						},
 					},
 				],
+			},
+			{
+				type: "list",
+				heading: "Folder rules",
+				emptyState: "No rules yet. Notebooks go to the vault folder above, mirroring the device's folders.",
+				addItem: { name: "Add folder rule", action: () => this.editRule(null) },
+				onDelete: (index) => void this.deleteRule(index),
+				items: this.plugin.settings.folderRules.map((rule, index) => ({
+					name: rule.supernotePrefix,
+					desc: this.describeRule(rule),
+					render: (setting) => {
+						setting.addExtraButton((button) =>
+							button
+								.setIcon("folder-input")
+								.setTooltip("Move existing notes here")
+								.onClick(() => this.moveNotesFor(rule)),
+						);
+						setting.addExtraButton((button) =>
+							button
+								.setIcon("pencil")
+								.setTooltip("Edit")
+								.onClick(() => this.editRule(index)),
+						);
+					},
+				})),
 			},
 			{
 				type: "group",
@@ -160,6 +188,55 @@ export class SupernoteBridgeSettingTab extends PluginSettingTab {
 				],
 			},
 		];
+	}
+
+	private describeRule(rule: FolderRule): string {
+		const parts = [`→ ${rule.vaultFolder}`];
+		if (rule.splitMode) parts.push(SPLIT_LABELS[rule.splitMode]);
+		return parts.join(" · ");
+	}
+
+	private editRule(index: number | null): void {
+		const rules = this.plugin.settings.folderRules;
+		const existing = index === null ? null : (rules[index] ?? null);
+		const others = rules.filter((_, i) => i !== index).map((rule) => rule.supernotePrefix);
+		const defaults = { mode: this.plugin.settings.splitMode, titleStyles: this.plugin.settings.splitTitleStyles };
+		new RuleModal(this.app, this.plugin.client, existing, defaults, others, (rule) => {
+			void (async () => {
+				const next = [...this.plugin.settings.folderRules];
+				if (index === null) next.push(rule);
+				else next[index] = rule;
+				this.plugin.settings.folderRules = next.sort((a, b) => a.supernotePrefix.localeCompare(b.supernotePrefix));
+				await this.plugin.saveSettings();
+				this.update();
+				new Notice("Saved. Notes synced before stay where they are until you move them with the rule's folder button.");
+			})();
+		}).open();
+	}
+
+	private async deleteRule(index: number): Promise<void> {
+		this.plugin.settings.folderRules = this.plugin.settings.folderRules.filter((_, i) => i !== index);
+		await this.plugin.saveSettings();
+		this.update();
+	}
+
+	private moveNotesFor(rule: FolderRule): void {
+		const { settings } = this.plugin;
+		const moves = planMoves(placedNotes(this.app), settings.folderRules, settings.vaultRoot, rule);
+		if (moves.length === 0) {
+			new Notice("Every note for this rule is already in place.");
+			return;
+		}
+		new ConfirmMoveModal(
+			this.app,
+			moves.map((move) => move.from),
+			rule.vaultFolder,
+			() =>
+				void applyMoves(this.app, moves).then(({ moved, skipped }) => {
+					const tail = skipped.length ? ` ${skipped.length} stayed put because their new path was taken: ${skipped.join(", ")}.` : "";
+					new Notice(`Moved ${moved} ${moved === 1 ? "note" : "notes"}.${tail}`, skipped.length ? 15000 : 5000);
+				}),
+		).open();
 	}
 
 	override getControlValue(key: string): unknown {

@@ -265,11 +265,18 @@ exists.
 - [x] **PL-1** sign-in: OAuth (SV-1b) through `registerObsidianProtocolHandler`,
       tokens in SecretStorage, refresh + rotation; "paste an app token" fallback
 - [x] **PL-1a** "This device syncs with the server" switch, stored per device
-      (`loadLocalStorage`, not the synced `data.json`). Only that device pulls
-      and pushes; other devices get the notes and edits through Obsidian Sync,
-      so they need no token. Prevents two devices writing the same notes.
+      (`loadLocalStorage`, not the synced `data.json`). Any number of devices
+      can turn it on, each with its own folders (e.g. a laptop takes all, a
+      work machine only `Work`); devices with it off, like a headless vault
+      host, get the notes through Obsidian Sync. Overlapping devices are safe
+      because a note holds nothing device-specific (no `sn_synced`), so every
+      device writes the same bytes.
+- [x] **PL-1b** edit detection ignores user markup (`src/sync/markup.ts`):
+      links read as their label, tags/embeds/block ids are dropped. A linked
+      page keeps following the server, and its markup is re-applied to new
+      text; markup whose words are gone is reported.
 - [x] **PL-2** list notebooks under configured Supernote roots
-- [x] **PL-3** folder mapping rules (model + mirroring; no rules editor UI yet) (Supernote prefix → vault folder) + default
+- [x] **PL-3** folder rules (device folder → vault folder, longest prefix wins, subfolders mirrored) with a settings editor; synced in `data.json` so every device places a notebook the same way. "Move existing notes here" moves a rule's notes on request (never automatically, so hand-moved notes aren't fought over)
 - [x] **PL-4** `notebook` split mode, transcript → managed blocks, frontmatter
 - [x] **PL-5** idempotent re-sync (rewrite only changed blocks; preserve outside text)
 - [x] **PL-6a** (0.1.1) folder selection is **per device** (`DeviceStore`),
@@ -301,7 +308,7 @@ exists.
 ### P5 — Extras
 - [ ] **PL-16** `supernote-page` image code block + cache
 - [ ] **PL-17** side-by-side reading layout
-- [ ] **PL-18** per-folder split-mode overrides
+- [~] **PL-18** per-folder split-mode overrides — stored per rule (`splitFor`); takes effect with P2
 
 ### Server track (parallel, in the fork)
 - [~] **SV-1** plugin token — built + preflight READY on server branch
