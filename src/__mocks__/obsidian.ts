@@ -141,8 +141,36 @@ export class FakeEl {
 
 export function setIcon(): void {}
 
-export class AbstractInputSuggest {}
-export class Setting {}
+export class AbstractInputSuggest {
+	onSelect(): this {
+		return this;
+	}
+}
+
+const COMPONENT_ADDERS = new Set(["addText", "addDropdown", "addToggle", "addButton", "addExtraButton"]);
+
+/** Any chain of calls and property reads succeeds; Setting's component
+ *  callbacks (addText etc.) run with another chain, so code building a row
+ *  runs end to end. Event listeners are never fired. */
+function chain(name = ""): unknown {
+	return new Proxy(function () {}, {
+		get: (_target, prop) => (prop === "then" ? undefined : chain(String(prop))),
+		apply: (_target, _this, args: unknown[]) => {
+			if (COMPONENT_ADDERS.has(name)) {
+				for (const arg of args) if (typeof arg === "function") (arg as (c: unknown) => void)(chain());
+			}
+			return chain();
+		},
+	});
+}
+
+/** Records its rows in the container, so tests can count them. */
+export class Setting {
+	constructor(containerEl: FakeEl) {
+		containerEl.createDiv({ cls: "setting-item" });
+		return chain() as Setting;
+	}
+}
 
 export const editorLivePreviewField = undefined;
 

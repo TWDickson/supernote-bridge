@@ -70,7 +70,10 @@
 
 .snb-folder-toggle {
 	flex: none;
-	width: var(--icon-size, 18px);
+}
+
+.snb-folder-toggle.is-leaf {
+	visibility: hidden;
 }
 
 .snb-folder-followers {

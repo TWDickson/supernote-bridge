@@ -77,13 +77,33 @@ describe("FolderTree", () => {
 });
 
 describe("FolderTree leaves", () => {
-	it("drop their chevron once they're known to have no subfolders", async () => {
+	it("hide their chevron once they're known to have no subfolders, keeping rows aligned", async () => {
 		const el = new FakeEl();
 		const { tree: t } = mountTree();
 		t.mount(el as unknown as HTMLElement);
 		await vi.waitFor(() => {
 			const toggles = el.all().filter((e) => e.cls.includes("snb-folder-toggle"));
-			expect(toggles.map((e) => e.cls.includes("clickable-icon"))).toEqual([false, true]);
+			expect(toggles.map((e) => e.cls.includes("is-leaf"))).toEqual([true, false]);
 		});
+	});
+});
+
+describe("FolderTree settings panels", () => {
+	it("open independently, so a folder and its subfolder show together", async () => {
+		const el = new FakeEl();
+		const { tree: t } = mountTree();
+		t.mount(el as unknown as HTMLElement);
+		const first = await rendered(el, (all) => all.some((e) => e.tag === "input"));
+		first.filter((e) => e.cls.includes("snb-folder-toggle"))[1]?.fire("click");
+		await rendered(el, (all) => all.filter((e) => e.tag === "input").length === 4);
+
+		const open = (text: string) => el.all().find((e) => e.tag === "button" && e.text === text)?.fire("click");
+		open("→ Supernote");
+		open("→ Supernote/Work");
+
+		const panels = () => el.all().filter((e) => e.cls.includes("snb-folder-panel")).length;
+		expect(panels()).toBe(2);
+		open("→ Supernote");
+		expect(panels()).toBe(1);
 	});
 });

@@ -44,7 +44,9 @@ export class FolderTree {
 	private roots: FolderNode[] | null = null;
 	private loadError: string | null = null;
 	private loading = false;
-	private openPath: string | null = null;
+	/* Folders whose settings are showing. Each opens and closes on its own,
+	   so a folder and its subfolder can be compared side by side. */
+	private openPaths = new Set<string>();
 	private el: HTMLElement | null = null;
 	/** Folders whose subfolders are being looked up, so leaves can drop their chevron. */
 	private peeking = new Set<FolderNode>();
@@ -102,12 +104,14 @@ export class FolderTree {
 		const row = parent.createDiv({ cls: "snb-folder-row" });
 		row.setCssProps({ "--snb-depth": String(depth) });
 
-		/* A folder known to have no subfolders gets no chevron. */
-		const toggle = row.createSpan({ cls: "snb-folder-toggle" });
+		/* Every row draws the chevron so names line up; a folder known to have
+		   no subfolders hides it and can't be expanded. */
+		const toggle = row.createSpan({ cls: "snb-folder-toggle clickable-icon" });
+		setIcon(toggle, node.expanded ? "chevron-down" : "chevron-right");
 		if (node.children === null) this.peek(node);
-		if (node.children?.length !== 0) {
-			toggle.addClass("clickable-icon");
-			setIcon(toggle, node.expanded ? "chevron-down" : "chevron-right");
+		if (node.children?.length === 0) {
+			toggle.addClass("is-leaf");
+		} else {
 			toggle.setAttr("aria-label", node.expanded ? "Collapse" : "Expand");
 			toggle.addEventListener("click", () => void this.toggleExpanded(node));
 		}
@@ -129,7 +133,7 @@ export class FolderTree {
 		   rows stay bare. */
 		if (isSelected(node.path, selection)) {
 			const own = ownRule(node.path, settings.folderRules);
-			const open = this.openPath === node.path;
+			const open = this.openPaths.has(node.path);
 			const summary = row.createEl("button", {
 				cls: `snb-folder-summary${own ? " snb-own" : ""}${open ? " is-active" : ""}`,
 				text: this.describe(node.path, settings),
@@ -137,7 +141,8 @@ export class FolderTree {
 			summary.setAttr("aria-expanded", String(open));
 			summary.setAttr("aria-label", `${own ? "Set on this folder" : "Inherited"}. Change where ${node.name} goes and how it splits`);
 			summary.addEventListener("click", () => {
-				this.openPath = open ? null : node.path;
+				if (open) this.openPaths.delete(node.path);
+				else this.openPaths.add(node.path);
 				this.render();
 			});
 			if (open) this.renderPanel(node, parent, depth);
